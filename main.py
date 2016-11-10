@@ -25,8 +25,12 @@ def dbCreateTable(filepath):
 
 
 def getFileInfo(folder, cursor):
+    nrOfDirs = 0
+    nrOfFiles = 0
     for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
+        nrOfDirs += 1
         for name in files:
+            nrOfFiles +=1
             filepath = os.path.join(root, name)
             st = os.stat(filepath)
             acessRight = oct(stat.S_IMODE(st.st_mode)) #wwww.stomp.colorado.edu
@@ -47,7 +51,10 @@ def getFileInfo(folder, cursor):
             cursor.execute("INSERT INTO info VALUES(?,?,?,?,?,?,0)",(filepath,fileSize,userIdentiy,groupIdentity,acessRight,lastModify))
             cursor.commit()
             #compare(cursor, filepath, lastModify, fileSize, userIdentiy, groupIdentity, acessRight)
-
+    #return {'nrOfDirs':nrOfDirs, 'nrOfFiles':nrOfFiles }
+    #yield nrOfDirs # first time the function is called it return dirs, the function stops here
+    #yield nrOfFiles # Second time the function is called it return nrOfFiles
+    return (nrOfDirs, nrOfFiles)
 
 def getOldfileInfo(cursor,filepath):
     cursor = cursor.execute('SELECT * FROM info WHERE filepath=?',(filepath,))
@@ -80,17 +87,15 @@ def compare(cursor, filepath, lastModify, fileSize, userIdentiy, groupIdentity, 
                 errorMsg += "changed accessright from {} to {}\n".format(oldInfo[4], acessRight)
 
             print(errorMsg)
-        else:
+        #else:
             # File has not been changed since befor
-            print("Hej")
 
 
 def initializationReport(monitoreDirectory, pathVerification, nrOfDir, nrofFiles, startTime, reportFile):
-    ss = monitoreDirectory + "\n" + pathVerification + "\n" + nrOfDir + "\n" + nrofFiles + "\n"
-    fprint = open(reportFile,"wb")
-    endTime = time.time()
-    elapsedTime = endTime - startTime
-    ss += elapsedTime + "\n"
+    ss = "Monitored-directory " + monitoreDirectory + "\n" + "Verification-file " + pathVerification + "\n" + "Nr-of-directorys " + str(nrOfDir) + "\n" + "Nr-of-files" + str(nrofFiles) + "\n"
+    fprint = open(reportFile,"w")
+    elapsedTime = time.time() - startTime
+    ss += "Time-to-complete,in-seconds " + str(elapsedTime) + "\n"
     fprint.write(ss)
     fprint.close()
 
@@ -125,8 +130,9 @@ def initializationMode(args):
                     print("Will create new files")
                     startTime = time.time()
                     cursor = dbCreateTable(args.V)
-                    getFileInfo(args.D, cursor)
-                    cursor.close()
+                    nrOfDirs, nrOfFiles = getFileInfo(args.D, cursor)
+                    cursor.close() # close db connection
+                    initializationReport(args.D, args.V, nrOfDirs, nrOfFiles, startTime, args.R)
                 else:
                     print("Verification: {}\n Report: {} \n can't be inside: directory {}\n please specify outside {}".format(args.V, args.R, args.D, args.D))
             else: # args.V && R is provided
