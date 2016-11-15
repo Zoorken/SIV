@@ -1,9 +1,9 @@
 #!/usr/bin/python3
-import argparse, os, stat, sqlite3, time
+import argparse, os, stat, sqlite3, time, hashlib
 from pwd import getpwuid
 
 def argumentParser():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Use the program in either Initialization or Verification mode:\n Example Initialization: siv -i -D important_directory -V verificationDB -R my_repoirt.txt -H sha1\n Example Verification: siv -v -D important_directory -V verificationDB -R my_report2.txt")
     parser.add_argument("-i", help="Initialization mode", action="store_true")
     parser.add_argument("-v", help="Verification mode", action="store_true")
     parser.add_argument("-D", help="Monitored directory")
@@ -20,7 +20,7 @@ def connect_db(filepath):
 
 def dbCreateTable(filepath):
     cursor = connect_db(filepath)
-    cursor.execute("CREATE table info (filePath TEXT UNIQUE, fileSize INT, userIdentidy TEXT, groupIdentity Text, acessRight Text, lastModify INT, checked Int)")
+    cursor.execute("CREATE table info (filePath TEXT UNIQUE, fileSize INT, userIdentidy TEXT, groupIdentity Text, acessRight Text, lastModify INT, MD5 Text, checked Int)")
     return cursor
 
 
@@ -39,22 +39,33 @@ def getFileInfo(folder, cursor):
             groupIdentity = getpwuid(st.st_gid).pw_name
             lastModify = st.st_mtime
 
-            print("Filepath {}".format(filepath))
-            print("Filesize {}".format(fileSize))
-            print("OwnerIdentidy {}".format(userIdentiy))
-            print("GroupIdentify {}".format(groupIdentity))
-            print("AccessRight {}".format(acessRight))
-            print("lastModify {}".format(lastModify))
-
+            #print("Filepath {}".format(filepath))
+            #print("Filesize {}".format(fileSize))
+            #print("OwnerIdentidy {}".format(userIdentiy))
+            #print("GroupIdentify {}".format(groupIdentity))
+            #print("AccessRight {}".format(acessRight))
+            #print("lastModify {}".format(lastModify))
             # Should calculate some hashing
+            md5Hash = md5(filepath)
 
-            cursor.execute("INSERT INTO info VALUES(?,?,?,?,?,?,0)",(filepath,fileSize,userIdentiy,groupIdentity,acessRight,lastModify))
+            cursor.execute("INSERT INTO info VALUES(?,?,?,?,?,?,?,0)",(filepath,fileSize,userIdentiy,groupIdentity,acessRight,lastModify,md5Hash))
             cursor.commit()
             #compare(cursor, filepath, lastModify, fileSize, userIdentiy, groupIdentity, acessRight)
     #return {'nrOfDirs':nrOfDirs, 'nrOfFiles':nrOfFiles }
     #yield nrOfDirs # first time the function is called it return dirs, the function stops here
     #yield nrOfFiles # Second time the function is called it return nrOfFiles
     return (nrOfDirs, nrOfFiles)
+
+def md5(fileName):
+    md5 = hashlib.md5() # Create md5 object
+    blocksize = 65536 # Reads a big chunck each time
+    afile = open(fileName, 'rb') # Read file binary
+    buf = afile.read(blocksize) # Read the first 65536 bytes
+    while len(buf) > 0:
+        md5.update(buf) # Att the buf to the function
+        buf = afile.read(blocksize) # Large files needs iterating
+    return md5.hexdigest() # Return the checksum
+
 
 def getOldfileInfo(cursor,filepath):
     cursor = cursor.execute('SELECT * FROM info WHERE filepath=?',(filepath,))
@@ -130,6 +141,7 @@ def initializationMode(args):
                     print("Will create new files")
                     startTime = time.time()
                     cursor = dbCreateTable(args.V)
+
                     nrOfDirs, nrOfFiles = getFileInfo(args.D, cursor)
                     cursor.close() # close db connection
                     initializationReport(args.D, args.V, nrOfDirs, nrOfFiles, startTime, args.R)
