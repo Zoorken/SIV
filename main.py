@@ -1,14 +1,14 @@
 #!/usr/bin/python3
-import argparse, os, stat, sqlite3, time, hashlib
+import argparse, os, stat, sqlite3, time, hashlib, csv
 from pwd import getpwuid
 
 def argumentParser():
     parser = argparse.ArgumentParser(description="Use the program in either Initialization or Verification mode:\n Example Initialization: siv -i -D important_directory -V verificationDB -R my_repoirt.txt -H sha1\n Example Verification: siv -v -D important_directory -V verificationDB -R my_report2.txt")
     parser.add_argument("-i", help="Initialization mode", action="store_true")
     parser.add_argument("-v", help="Verification mode", action="store_true")
-    parser.add_argument("-D", help="Monitored directory")
-    parser.add_argument("-V", help="Verification file, not in monitored directory")
-    parser.add_argument("-R", help="Report file, not in monitored directory")
+    parser.add_argument("-D", help="Monitored directory", required=True)
+    parser.add_argument("-V", help="Verification file, not in monitored directory", required=True)
+    parser.add_argument("-R", help="Report file, not in monitored directory", required=True)
     parser.add_argument("-H", help="Hash function", choices=["SHA-1", "MD-5"])
     return parser.parse_args()
 
@@ -18,9 +18,9 @@ def connect_db(filepath):
     return sqlite3.connect(filepath)
 
 
-def dbCreateTable(filepath):
+def dbCreateTable(filepath, hashMode):
     cursor = connect_db(filepath)
-    cursor.execute("CREATE table info (filePath TEXT UNIQUE, fileSize INT, userIdentidy TEXT, groupIdentity Text, acessRight Text, lastModify INT, MD5 Text, checked Int)")
+    cursor.execute("CREATE table info (filePath TEXT UNIQUE, fileSize INT, userIdentidy TEXT, groupIdentity Text, acessRight Text, lastModify INT, " + hashMode +" Text, checked Int)")
     return cursor
 
 
@@ -49,7 +49,7 @@ def getFileInfo(folder, cursor):
             md5Hash = md5(filepath)
 
             cursor.execute("INSERT INTO info VALUES(?,?,?,?,?,?,?,0)",(filepath,fileSize,userIdentiy,groupIdentity,acessRight,lastModify,md5Hash))
-            cursor.commit()
+    cursor.commit()
             #compare(cursor, filepath, lastModify, fileSize, userIdentiy, groupIdentity, acessRight)
     #return {'nrOfDirs':nrOfDirs, 'nrOfFiles':nrOfFiles }
     #yield nrOfDirs # first time the function is called it return dirs, the function stops here
@@ -103,60 +103,130 @@ def compare(cursor, filepath, lastModify, fileSize, userIdentiy, groupIdentity, 
 
 
 def initializationReport(monitoreDirectory, pathVerification, nrOfDir, nrofFiles, startTime, reportFile):
-    ss = "Monitored-directory " + monitoreDirectory + "\n" + "Verification-file " + pathVerification + "\n" + "Nr-of-directorys " + str(nrOfDir) + "\n" + "Nr-of-files" + str(nrofFiles) + "\n"
+    ss = "Monitored directory :" + monitoreDirectory + "\n" + "Verification file :" + pathVerification + "\n" + "Nr of directorys :" + str(nrOfDir) + "\n" + "Nr of files :" + str(nrofFiles) + "\n"
     fprint = open(reportFile,"w")
     elapsedTime = time.time() - startTime
-    ss += "Time-to-complete,in-seconds " + str(elapsedTime) + "\n"
+    ss += "Time to complete in seconds :" + str(elapsedTime) + "\n"
     fprint.write(ss)
     fprint.close()
 
 
 def initializationMode(args):
     print("Initialization mode\n")
-    if args.D: # Check if user provided argument
-        if(os.path.isdir(args.D)): # Check if directory exist
-            print("{} exists".format(args.D))
-            if args.V and args.R: # Check if user provided verification and report argument
-                if args.D not in args.V and args.D not in args.R: # Check if the paths is outside the directory
-                    if os.path.isdir(args.V) or os.path.isdir(args.R):
-                        print("Need to specify a file for verification file and report file")
-                        quit()
+    if(os.path.isdir(args.D)): # Check if directory exist
+        print("{} exists".format(args.D))
+        if args.D not in args.V and args.D not in args.R: # Check if the paths is outside the directory
+            if os.path.isdir(args.V) or os.path.isdir(args.R):
+                print("Need to specify a file for verification file and report file")
+                quit()
 
-                    print("Verification and report ok")
-                    # check if verification and report file exists
-                    if os.path.isfile(args.V) or os.path.isfile(args.R):
-                        # User must do a choice
-                        ans = ""
-                        while(ans != "yes" and ans != "no"):
-                            ans = input("Should we overwrite verification {} and report {} yes/no : ".format(args.V, args.R))
-                        if ans == "no":
-                            print("The files will be preserved, goodbye")
-                            quit() # terminate the program
-                        else:
-                            if os.path.isfile(args.V):
-                                os.remove(args.V)
-                            if os.path.isfile(args.R):
-                                os.remove(args.R)
-                    # Continue if this was the users will
-                    print("Will create new files")
-                    startTime = time.time()
-                    cursor = dbCreateTable(args.V)
-
-                    nrOfDirs, nrOfFiles = getFileInfo(args.D, cursor)
-                    cursor.close() # close db connection
-                    initializationReport(args.D, args.V, nrOfDirs, nrOfFiles, startTime, args.R)
+            print("Verification and report ok")
+            # check if verification and report file exists
+            if os.path.isfile(args.V) or os.path.isfile(args.R):
+                # User must do a choice
+                ans = ""
+                while(ans != "yes" and ans != "no"):
+                    ans = input("Should we overwrite verification {} and report {} yes/no : ".format(args.V, args.R))
+                if ans == "no":
+                    print("The files will be preserved, goodbye")
+                    quit() # terminate the program
                 else:
-                    print("Verification: {}\n Report: {} \n can't be inside: directory {}\n please specify outside {}".format(args.V, args.R, args.D, args.D))
-            else: # args.V && R is provided
-                print("Specify verification file and Report file")
-        else: #isdir args.D
-            print("Directory {} is not existing".format(args.D))
-    else: # args.D
-        print("Specify monitored directory\n")
+                    if os.path.isfile(args.V):
+                        os.remove(args.V)
+                    if os.path.isfile(args.R):
+                        os.remove(args.R)
+            # Continue if this was the users will
+            print("Will create new files")
+            startTime = time.time()
+
+            if args.H == "MD-5": # Determine the name of the field in db
+                cursor = dbCreateTable(args.V,"md5")
+            else:
+                cursor = dbCreateTable(args.V,"sha1")
+
+            nrOfDirs, nrOfFiles = getFileInfo(args.D, cursor)
+            cursor.close() # close db connection
+            initializationReport(args.D, args.V, nrOfDirs, nrOfFiles, startTime, args.R)
+        else:
+            print("Verification: {}\n Report: {} \n can't be inside: directory {}\n please specify outside {}".format(args.V, args.R, args.D, args.D))
+    else: #isdir args.D
+        print("Directory {} is not existing".format(args.D))
+
 
 
 def verificationMode(args):
     print("Verification mode")
+    # Checking users input
+    if checkUserInputIfValid(args):
+        if os.path.isfile(args.V) and os.path.isfile(args.R): # Make sure the verification and report exists
+            ###########
+            # Start verification process
+            ##########
+            print("Start verification process")
+            mDirectory, verDB = parseReportFile(args)
+
+    else: # checkUserInputIfValid
+        quit()
+
+def parseReportFile(args):
+    reportInformation = []
+    print("Begin parsing")
+    with open(args.R, newline='') as csvfile:
+        parser = csv.reader(csvfile, delimiter=':')
+        for row in parser:
+            reportInformation.append(row[1])
+    # This information should be enought for now
+    return (reportInformation[0], reportInformation[1])
+
+def removeFiles(args):
+    if os.path.isfile(args.V) and os.path.isfile(args.R):
+        os.remove(args.V)
+        os.path.isfile(args.R)
+    else:
+        print("Error occured while removing {} and {},\n The program will exit".format(args.V, args.R))
+        quit()
+
+
+def userChoiceDeleteVerandReport(args):
+    ans = ""
+    while(ans != "yes" and ans != "no"):
+        ans = input("Should we overwrite verification {} and report {} yes/no : ".format(args.V, args.R))
+    return ans
+
+
+def checkUserInputIfValid(args):
+    flag = False
+    if(os.path.isdir(args.D)): # Check if directory exist
+        #print("{} exists".format(args.D))
+        if args.D not in args.V and args.D not in args.R: # Check if the paths is outside the directory
+            if os.path.isdir(args.V) or os.path.isdir(args.R): # Check that the paths leads to folders
+                print("Need to specify a file for verification file and report file")
+            else:
+                print("Verification and report ok")
+                flag = True
+                # check if verification and report file exists
+                #if os.path.isfile(args.V) or os.path.isfile(args.R):
+                    # User must do a choice
+                #    if userChoiceDeleteVerandReport == "no":
+                #        print("The files will be preserved, goodbye")
+                #        quit() # terminate the program
+                #    else:
+                #        removeFiles(args)
+                # Continue if this was the users will
+                #print("Will create new files")
+                #startTime = time.time()
+
+                #if args.H == "MD-5": # Determine the name of the field in db
+                #    cursor = dbCreateTable(args.V,"md5")
+                #else:
+                #    cursor = dbCreateTable(args.V,"sha1")
+        else:
+            print("Verification: {}\n Report: {} \n can't be inside: directory {}\n please specify outside {}".format(args.V, args.R, args.D, args.D))
+    else: #isdir args.D
+        print("Directory {} is not existing".format(args.D))
+
+    return flag
+
 
 
 def main():
