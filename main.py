@@ -18,13 +18,19 @@ def connect_db(filepath):
     return sqlite3.connect(filepath)
 
 
-def dbCreateTable(filepath, hashMode):
+def dbCreateTable(filepath):
     cursor = connect_db(filepath)
-    cursor.execute("CREATE table info (filePath TEXT UNIQUE, fileSize INT, userIdentidy TEXT, groupIdentity Text, acessRight Text, lastModify INT, " + hashMode +" Text, checked Int)")
+    cursor.execute("CREATE table info (filePath TEXT UNIQUE, fileSize INT, userIdentidy TEXT, groupIdentity Text, acessRight Text, lastModify INT,hashMode Text, checked Int)")
+    cursor.execute("CREATE table config (hashMode TEXT)")
     return cursor
 
+def sethashTypeDB(cursor, hashType):
+    cursor.execute("INSERT INTO config VALUES(?)",(hashType,))
+    cursor.commit()
+    print("HashMode: {}".format(hashType))
 
-def getFileInfo(folder, cursor):
+
+def getFileInfo(folder, cursor, hashType):
     nrOfDirs = 0
     nrOfFiles = 0
     for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
@@ -40,32 +46,38 @@ def getFileInfo(folder, cursor):
             lastModify = st.st_mtime
 
             # Should calculate some hashing
-            md5Hash = md5(filepath)
+            if(hashType == "MD-5"):
+                md5 = hashlib.md5()
+                cHash = calcHash(filepath, md5)
+            else:
+                sha1 = hashlib.sha1()
+                cHash = calcHash(filepath, sha1)
 
-            cursor.execute("INSERT INTO info VALUES(?,?,?,?,?,?,?,0)",(filepath,fileSize,userIdentiy,groupIdentity,acessRight,lastModify,md5Hash))
-
-            #compare(cursor, filepath, lastModify, fileSize, userIdentiy, groupIdentity, acessRight)
-
+            cursor.execute("INSERT INTO info VALUES(?,?,?,?,?,?,?,0)",(filepath,fileSize,userIdentiy,groupIdentity,acessRight,lastModify,cHash))
 
     cursor.commit()
     return (nrOfDirs, nrOfFiles)
 
 
-def md5(fileName):
-    md5 = hashlib.md5() # Create md5 object
+def calcHash(fileName, hashObj):
     blocksize = 65536 # Reads a big chunck each time
     afile = open(fileName, 'rb') # Read file binary
     buf = afile.read(blocksize) # Read the first 65536 bytes
     while len(buf) > 0:
-        md5.update(buf) # Att the buf to the function
+        hashObj.update(buf) # Att the buf to the function
         buf = afile.read(blocksize) # Large files needs iterating
-    return md5.hexdigest() # Return the checksum
+    return hashObj.hexdigest() # Return the checksum
 
 
 def getOldfileInfo(cursor,filepath):
     cursor = cursor.execute('SELECT * FROM info WHERE filepath=?',(filepath,))
     for row in cursor:
         return row
+
+def getHashTypeInfo(cursor):
+    cursor = cursor.execute('SELECT * FROM config')
+    for row in cursor:
+        return row[0]
 
 
 def initializationReport(monitoreDirectory, pathVerification, nrOfDir, nrofFiles, startTime, reportFile):
@@ -91,10 +103,8 @@ def initializationMode(args):
             if args.H == "MD-5" or args.H == "SHA-1":
                 if os.path.isfile(args.V) or os.path.isfile(args.R):
                     # User must do a choice
-                    ans = ""
-                    while(ans != "yes" and ans != "no"):
-                        ans = input("Should we overwrite verification {} and report {} yes/no : ".format(args.V, args.R))
-                    if ans == "no":
+                    string = "Should we overwrite verification {} and report {} yes/no : ".format(args.V, args.R)
+                    if userChoiceDeleteVerandReport(args, string) == "no":
                         print("The files will be preserved, goodbye")
                         quit() # terminate the program
                     else:
@@ -106,12 +116,10 @@ def initializationMode(args):
                 print("Creates new report file and verification file")
                 startTime = time.time()
 
-                if args.H == "MD-5": # Determine the name of the field in db
-                    cursor = dbCreateTable(args.V,"md5")
-                else:
-                    cursor = dbCreateTable(args.V,"sha1")
+                cursor = dbCreateTable(args.V)
+                sethashTypeDB(cursor, args.H) # Now we have stored which type hash is
 
-                nrOfDirs, nrOfFiles = getFileInfo(args.D, cursor)
+                nrOfDirs, nrOfFiles = getFileInfo(args.D, cursor, args.H)
                 cursor.close() # close db connection
                 initializationReport(args.D, args.V, nrOfDirs, nrOfFiles, startTime, args.R)
                 print("Done with Initialization")
@@ -128,24 +136,35 @@ def verificationMode(args):
     print("Verification mode")
     # Checking users input
     if checkUserInputIfValid(args):
-        if os.path.isfile(args.V) and os.path.isfile(args.R): # Make sure the verification and report exists
+        if os.path.isfile(args.V): # Make sure the verification and report exists
+            if os.path.isfile(args.R):
+                string = "Should we overwrite report {} yes/no : ".format(args.R)
+                if userChoiceDeleteVerandReport(args, string) == "no":
+                    print("We can't continue, try again with different report file")
+                    quit()
+                else:
+                    os.remove(args.R)
             ###########
             # Start verification process
             ##########
             startTime = time.time()
             cursor = connect_db(args.V)
-            nrOfWarnings, nrOfDirs, nrOfFiles, ssChangedFiles= compare(args.D, cursor)
+            hashType = getHashTypeInfo(cursor)
+            print(hashType)
+            nrOfWarnings, nrOfDirs, nrOfFiles, ssChangedFiles = compare(args.D, cursor, hashType)
             nrOfWarnings, ssChangedFiles = deletedFiles(cursor, nrOfWarnings, ssChangedFiles)
 
             reportFileVerification(args.D, args.V, args.R, nrOfDirs, nrOfFiles, nrOfWarnings,startTime, ssChangedFiles)
             # Clean up
             cursor.execute('UPDATE info SET checked=? WHERE checked =?',(0,1)) # Changed it back
             cursor.commit() # Change it back
+        else:
+            print("Verification db don't exists")
 
     else: # checkUserInputIfValid
         quit()
 
-def compare(folder, cursor):
+def compare(folder, cursor, hashType):
     fileChanged = False
     nrOfDirs = 0
     nrOfFiles = 0
@@ -172,7 +191,12 @@ def compare(folder, cursor):
                 lastModify = st.st_mtime
 
                 # Should calculate some hashing
-                md5Hash = md5(filepath)
+                if(hashType == "MD-5"):
+                    md5 = hashlib.md5()
+                    cHash = calcHash(filepath, md5)
+                else:
+                    sha1 = hashlib.sha1()
+                    cHash = calcHash(filepath, sha1)
 
                 #Compare the files with the one in db
                 errorMsg = "CHANGED: File {} ".format(filepath)
@@ -192,6 +216,9 @@ def compare(folder, cursor):
                 if oldInfo[4] != str(acessRight):
                     fileChanged = True
                     errorMsg += ", accessright from {} to {}".format(oldInfo[4], acessRight)
+                if oldInfo[6] != cHash:
+                    fileChanged = True
+                    errorMsg += ", file content compromized, hash not same"
 
                 if fileChanged:
                     nrOfWarnings +=1
@@ -207,8 +234,8 @@ def deletedFiles(cursor, nrOfWarnings, ssChangedFiles):
     cursor = cursor.execute('SELECT * FROM info WHERE checked=?',(0,))
     for row in cursor:
         nrOfWarnings += 1
-        print("File been deleted: {}".format(row))
-        ssChangedFiles += "File been deleted: {}\n".format(row)
+        print("File deleted: {}".format(row[0]))
+        ssChangedFiles += "File deleted: {}\n".format(row[0])
 
     return (nrOfWarnings, ssChangedFiles)
 
@@ -231,10 +258,10 @@ def removeFiles(args):
         quit()
 
 
-def userChoiceDeleteVerandReport(args):
+def userChoiceDeleteVerandReport(args, string):
     ans = ""
     while(ans != "yes" and ans != "no"):
-        ans = input("Should we overwrite verification {} and report {} yes/no : ".format(args.V, args.R))
+        ans = input(string)
     return ans
 
 
@@ -254,7 +281,6 @@ def checkUserInputIfValid(args):
         print("Directory {} is not existing".format(args.D))
 
     return flag
-
 
 
 def main():
