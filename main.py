@@ -20,8 +20,8 @@ def connect_db(filepath):
 
 def dbCreateTable(filepath):
     cursor = connect_db(filepath)
-    cursor.execute("CREATE table info (filePath TEXT UNIQUE, fileSize INT, userIdentidy TEXT, groupIdentity Text, acessRight Text, lastModify INT,hashMode Text, checked INT)")
-    cursor.execute("CREATE table infoFolders (folderPath TEXT UNIQUE, userIdentiy TEXT, groupIdentity TEXT, acessRight TEXT, lastModify INT, checked INT)")
+    cursor.execute("CREATE table info (fPath TEXT UNIQUE, fileSize INT, userIdentidy TEXT, groupIdentity Text, acessRight Text, lastModify INT,hashMode Text, checked INT)")
+    cursor.execute("CREATE table infoFolders (fPath TEXT UNIQUE, userIdentiy TEXT, groupIdentity TEXT, acessRight TEXT, lastModify INT, checked INT)")
     cursor.execute("CREATE table config (hashMode TEXT)")
     return cursor
 
@@ -84,7 +84,12 @@ def calcHash(fileName, hashObj):
 
 
 def getOldfileInfo(cursor,filepath):
-    cursor = cursor.execute('SELECT * FROM info WHERE filepath=?',(filepath,))
+    cursor = cursor.execute('SELECT * FROM info WHERE fPath=?',(filepath,))
+    for row in cursor:
+        return row
+
+def getOldFolderInfo(cursor,filepath):
+    cursor = cursor.execute('SELECT * FROM infoFolders WHERE fPath=?',(filepath,))
     for row in cursor:
         return row
 
@@ -167,7 +172,9 @@ def verificationMode(args):
             hashType = getHashTypeInfo(cursor)
             print(hashType)
             nrOfWarnings, nrOfDirs, nrOfFiles, ssChangedFiles = compare(args.D, cursor, hashType)
+            nrOfWarnings, ssChangedFiles = compareFolders(args.D, cursor, nrOfWarnings)
             nrOfWarnings, ssChangedFiles = deletedFiles(cursor, nrOfWarnings, ssChangedFiles)
+            nrOfWarnings, ssChangedFiles = deletedFolders(cursor, nrOfWarnings, ssChangedFiles)
 
             reportFileVerification(args.D, args.V, args.R, nrOfDirs, nrOfFiles, nrOfWarnings,startTime, ssChangedFiles)
             # Clean up
@@ -240,10 +247,56 @@ def compare(folder, cursor, hashType):
                     print(errorMsg + "\n")
                     ssChangedFiles += errorMsg + "\n"
 
-                cursor.execute('UPDATE info SET checked=? WHERE filepath =?',(1,filepath))
+                cursor.execute('UPDATE info SET checked=? WHERE fPath =?',(1,filepath))
         cursor.commit()
 
     return (nrOfWarnings,nrOfDirs,nrOfFiles,ssChangedFiles)
+
+def compareFolders(folder, cursor, nrOfWarnings):
+    ssChangedFiles = ""
+    for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
+        for name in dirs:
+            itemChanged = False
+            fPath = os.path.join(root, name)
+            oldInfo = getOldFolderInfo(cursor,fPath)
+
+            if oldInfo == None:
+                nrOfWarnings +=1
+                print("NEW FOLDER: {}".format(fPath))
+                ssChangedFiles += "NEW FOLDER: {}\n".format(fPath)
+            else:
+                # Retrive latest information about files
+                st = os.stat(fPath)
+                acessRight = oct(stat.S_IMODE(st.st_mode)) #wwww.stomp.colorado.edu
+                userIdentiy = getpwuid(st.st_uid).pw_name
+                groupIdentity = getpwuid(st.st_gid).pw_name
+                lastModify = st.st_mtime
+
+                #Compare the files with the one in db
+                errorMsg = "CHANGED: Folder {} ".format(fPath)
+                if oldInfo[1] != userIdentiy:
+                    itemChanged = True
+                    errorMsg += ", useridentify from {} to {}".format(oldInfo[2], userIdentiy)
+                if oldInfo[2] != groupIdentity:
+                    itemChanged = True
+                    errorMsg += ", groupidentiy from {} to {}".format(oldInfo[3], groupIdentity)
+                if oldInfo[3] != str(acessRight):
+                    itemChanged = True
+                    errorMsg += ", accessright from {} to {}".format(oldInfo[4], acessRight)
+                if oldInfo[4] != lastModify:
+                    itemChanged = True
+                    errorMsg += ", prev changes where made {} new changes {}".format(oldInfo[5], lastModify)
+                    # File has been modified from db version
+
+                if itemChanged:
+                    nrOfWarnings +=1
+                    print(errorMsg + "\n")
+                    ssChangedFiles += errorMsg + "\n"
+
+                cursor.execute('UPDATE infoFolders SET checked=? WHERE fPath =?',(1,fPath))
+        cursor.commit()
+
+    return (nrOfWarnings,ssChangedFiles)
 
 def deletedFiles(cursor, nrOfWarnings, ssChangedFiles):
     cursor = cursor.execute('SELECT * FROM info WHERE checked=?',(0,))
@@ -251,6 +304,15 @@ def deletedFiles(cursor, nrOfWarnings, ssChangedFiles):
         nrOfWarnings += 1
         print("File deleted: {}".format(row[0]))
         ssChangedFiles += "File deleted: {}\n".format(row[0])
+
+    return (nrOfWarnings, ssChangedFiles)
+
+def deletedFolders(cursor, nrOfWarnings, ssChangedFiles):
+    cursor = cursor.execute('SELECT * FROM infoFolders WHERE checked=?',(0,))
+    for row in cursor:
+        nrOfWarnings += 1
+        print("Folder deleted: {}".format(row[0]))
+        ssChangedFiles += "Folder deleted: {}\n".format(row[0])
 
     return (nrOfWarnings, ssChangedFiles)
 
@@ -271,7 +333,6 @@ def removeFiles(args):
     else:
         print("Error occured while removing {} and {},\n The program will exit".format(args.V, args.R))
         quit()
-
 
 def userChoiceDeleteVerandReport(args, string):
     ans = ""
