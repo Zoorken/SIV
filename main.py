@@ -20,7 +20,8 @@ def connect_db(filepath):
 
 def dbCreateTable(filepath):
     cursor = connect_db(filepath)
-    cursor.execute("CREATE table info (filePath TEXT UNIQUE, fileSize INT, userIdentidy TEXT, groupIdentity Text, acessRight Text, lastModify INT,hashMode Text, checked Int)")
+    cursor.execute("CREATE table info (filePath TEXT UNIQUE, fileSize INT, userIdentidy TEXT, groupIdentity Text, acessRight Text, lastModify INT,hashMode Text, checked INT)")
+    cursor.execute("CREATE table infoFolders (folderPath TEXT UNIQUE, userIdentiy TEXT, groupIdentity TEXT, acessRight TEXT, lastModify INT, checked INT)")
     cursor.execute("CREATE table config (hashMode TEXT)")
     return cursor
 
@@ -39,7 +40,7 @@ def getFileInfo(folder, cursor, hashType):
             nrOfFiles +=1
             filepath = os.path.join(root, name)
             st = os.stat(filepath)
-            acessRight = oct(stat.S_IMODE(st.st_mode)) #wwww.stomp.colorado.edu
+            acessRight = oct(stat.S_IMODE(st.st_mode)) # wwww.stomp.colorado.edu
             fileSize = st.st_size
             userIdentiy = getpwuid(st.st_uid).pw_name
             groupIdentity = getpwuid(st.st_gid).pw_name
@@ -57,6 +58,19 @@ def getFileInfo(folder, cursor, hashType):
 
     cursor.commit()
     return (nrOfDirs, nrOfFiles)
+
+def getFolderInfo(folder, cursor):
+    for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
+        for folderName in dirs:
+            folderPath = os.path.join(root,folderName)
+            folderSt = os.stat(folderPath)
+            acessRight = oct(stat.S_IMODE(folderSt.st_mode))
+            userIdentiy = getpwuid(folderSt.st_uid).pw_name
+            groupIdentity = getpwuid(folderSt.st_gid).pw_name
+            lastModify = folderSt.st_mtime
+
+            cursor.execute("INSERT INTO infoFolders VALUES(?,?,?,?,?,0)",(folderPath,userIdentiy,groupIdentity,acessRight,lastModify))
+    cursor.commit()
 
 
 def calcHash(fileName, hashObj):
@@ -120,6 +134,7 @@ def initializationMode(args):
                 sethashTypeDB(cursor, args.H) # Now we have stored which type hash is
 
                 nrOfDirs, nrOfFiles = getFileInfo(args.D, cursor, args.H)
+                getFolderInfo(args.D, cursor) # Get information about all the folders
                 cursor.close() # close db connection
                 initializationReport(args.D, args.V, nrOfDirs, nrOfFiles, startTime, args.R)
                 print("Done with Initialization")
@@ -240,7 +255,7 @@ def deletedFiles(cursor, nrOfWarnings, ssChangedFiles):
     return (nrOfWarnings, ssChangedFiles)
 
 def reportFileVerification(monitoreDirectory, pathVerification, reportFile, nrOfDir, nrOfFiles, nrOfWarnings, startTime, ssChangedFiles):
-    ss = "Monitored directory: " + monitoreDirectory + "\nVerification file: " + pathVerification + "\nReport file: "+ reportFile + "\nNr of directorys: " + str(nrOfDir) + "\nNr of files: " + str(nrOfFiles) + "\nNr of warnings: " + str(nrOfWarnings)
+    ss = "Monitored directory: " + os.path.abspath(monitoreDirectory) + "\nVerification file: " + os.path.abspath(pathVerification) + "\nReport file: "+ os.path.abspath(reportFile) + "\nNr of directorys: " + str(nrOfDir) + "\nNr of files: " + str(nrOfFiles) + "\nNr of warnings: " + str(nrOfWarnings)
     fprint = open(reportFile,"w")
     elapsedTime = time.time() - startTime
     ss += "\nTime to complete in seconds: " + str(elapsedTime) + "\n"
