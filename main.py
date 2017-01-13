@@ -276,16 +276,16 @@ def compareFolders(folder, cursor, nrOfWarnings):
                 errorMsg = "CHANGED: Folder {} ".format(fPath)
                 if oldInfo[1] != userIdentiy:
                     itemChanged = True
-                    errorMsg += ", useridentify from {} to {}".format(oldInfo[2], userIdentiy)
+                    errorMsg += ", useridentify from {} to {}".format(oldInfo[1], userIdentiy)
                 if oldInfo[2] != groupIdentity:
                     itemChanged = True
-                    errorMsg += ", groupidentiy from {} to {}".format(oldInfo[3], groupIdentity)
+                    errorMsg += ", groupidentiy from {} to {}".format(oldInfo[2], groupIdentity)
                 if oldInfo[3] != str(acessRight):
                     itemChanged = True
-                    errorMsg += ", accessright from {} to {}".format(oldInfo[4], acessRight)
+                    errorMsg += ", accessright from {} to {}".format(oldInfo[3], acessRight)
                 if oldInfo[4] != lastModify:
                     itemChanged = True
-                    errorMsg += ", prev changes where made {} new changes {}".format(oldInfo[5], lastModify)
+                    errorMsg += ", prev changes where made {} new changes {}".format(oldInfo[4], lastModify)
                     # File has been modified from db version
 
                 if itemChanged:
@@ -319,7 +319,7 @@ def reportFileVerification(monitoreDirectory, pathVerification, reportFile, nrOf
     ss = "Monitored directory: " + os.path.abspath(monitoreDirectory) + "\nVerification file: " + os.path.abspath(pathVerification) + "\nReport file: "+ os.path.abspath(reportFile) + "\nNr of directorys: " + str(nrOfDir) + "\nNr of files: " + str(nrOfFiles) + "\nNr of warnings: " + str(nrOfWarnings)
     fprint = open(reportFile,"w")
     elapsedTime = time.time() - startTime
-    ss += "\nTime to complete in seconds: " + str(elapsedTime) + "\n"
+    ss += "\nTime to complete in seconds: " + str(int(round(elapsedTime))) + "\n"
     ss += ssChangedFiles
     fprint.write(ss)
     fprint.close()
