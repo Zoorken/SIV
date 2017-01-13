@@ -207,8 +207,8 @@ def deletedFiles(cursor, nrOfWarnings, ssChangedFiles):
     cursor = cursor.execute('SELECT * FROM info WHERE checked=?',(0,))
     for row in cursor:
         nrOfWarnings += 1
-        print("File been deleted: {}".format(row))
-        ssChangedFiles += "File been deleted: {}\n".format(row)
+        print("File been deleted: {}".format(row[0]))
+        ssChangedFiles += "File been deleted: {}\n".format(row[0])
 
     return (nrOfWarnings, ssChangedFiles)
 
