@@ -142,38 +142,34 @@ def initializationMode(args):
 
 
 def verificationMode(args):
+    verifyModeverifyModeAbortInvalidUserInput(args)
     print("Verification mode")
-    # Checking users input
-    if checkUserInputIfValid(args):
-        if os.path.isfile(args.V): # Make sure the verification and report exists
-            if os.path.isfile(args.R):
-                string = "Should we overwrite report {} yes/no : ".format(args.R)
-                if userChoiceDeleteVerandReport(args, string) == "no":
-                    print("We can't continue, try again with different report file")
-                    quit()
-                else:
-                    os.remove(args.R)
-            ###########
-            # Start verification process
-            ##########
-            startTime = time.time()
-            cursor = connect_db(args.V)
-            hashType = getHashTypeInfo(cursor)
-            print(hashType)
-            nrOfWarnings, nrOfDirs, nrOfFiles, ssChangedFiles = compare(args.D, cursor, hashType)
-            nrOfWarnings, ssChangedFiles = compareFolders(args.D, cursor, nrOfWarnings)
-            nrOfWarnings, ssChangedFiles = deletedFiles(cursor, nrOfWarnings, ssChangedFiles)
-            nrOfWarnings, ssChangedFiles = deletedFolders(cursor, nrOfWarnings, ssChangedFiles)
+    if os.path.isfile(args.V): # Make sure the verification and report exists
+        if os.path.isfile(args.R):
+            string = "Should we overwrite report {} yes/no : ".format(args.R)
+            if userChoiceDeleteVerandReport(args, string) == "no":
+                print("We can't continue, try again with different report file")
+                quit()
+            else:
+                os.remove(args.R)
+        ###########
+        # Start verification process
+        ##########
+        startTime = time.time()
+        cursor = connect_db(args.V)
+        hashType = getHashTypeInfo(cursor)
+        print(hashType)
+        nrOfWarnings, nrOfDirs, nrOfFiles, ssChangedFiles = compare(args.D, cursor, hashType)
+        nrOfWarnings, ssChangedFiles = compareFolders(args.D, cursor, nrOfWarnings)
+        nrOfWarnings, ssChangedFiles = deletedFiles(cursor, nrOfWarnings, ssChangedFiles)
+        nrOfWarnings, ssChangedFiles = deletedFolders(cursor, nrOfWarnings, ssChangedFiles)
 
-            reportFileVerification(args.D, args.V, args.R, nrOfDirs, nrOfFiles, nrOfWarnings,startTime, ssChangedFiles)
-            # Clean up
-            cursor.execute('UPDATE info SET checked=? WHERE checked =?',(0,1)) # Changed it back
-            cursor.commit() # Change it back
-        else:
-            print("Verification db don't exists")
-
-    else: # checkUserInputIfValid
-        quit()
+        reportFileVerification(args.D, args.V, args.R, nrOfDirs, nrOfFiles, nrOfWarnings,startTime, ssChangedFiles)
+        # Clean up
+        cursor.execute('UPDATE info SET checked=? WHERE checked =?',(0,1)) # Changed it back
+        cursor.commit() # Change it back
+    else:
+        print("Verification db don't exists")
 
 def compare(folder, cursor, hashType):
     fileChanged = False
@@ -329,25 +325,34 @@ def userChoiceDeleteVerandReport(args, string):
     return ans
 
 
-def checkUserInputIfValid(args):
-    flag = False
-    if(os.path.isdir(args.D)): # Check if directory exist
-        #print("{} exists".format(args.D))
-        if args.D not in args.V and args.D not in args.R: # Check if the paths is outside the directory
-            if os.path.isdir(args.V) or os.path.isdir(args.R): # Check that the paths not leads to folders
-                print("Need to specify a file for verification and report")
-            else:
-                print("Verification and report ok")
-                flag = True
-        else:
-            print("Verification: {}\n Report: {} \n can't be inside: directory {}\n please specify outside {}".format(args.V, args.R, args.D, args.D))
-    else: #isdir args.D
-        print("Directory {} is not existing".format(args.D))
+def verifyModeverifyModeAbortInvalidUserInput(args):
+    inputMonitoredDirectoryValid(args)
+    inputDirNotInMetadataFiles(args.D, args.V, args.R)
+    inputIsDir(args.V, '-V')
+    inputIsDir(args.R, '-R')
+    print("Verification and report ok")
+    return True
 
-    return flag
+def inputMonitoredDirectoryValid(args):
+    if not os.path.isdir(args.D):
+        print("Directory {} is not existing".format(args.D))
+        quit()
+
+def inputDirNotInMetadataFiles(directory, verification, report):
+    if directory in verification and directory in report:
+        print("Verification: {}\n Report: {} \n can't be inside: " +
+              "directory {}\n please specify outside {}".format(verification, report, directory, directory))
+        quit()
+
+def inputIsDir(argument, f):
+    if os.path.isdir(f):
+        print("Argument [{}] value is not a file [{}]".format(argument, f))
+        quit()
 
 def argumentParser():
-    parser = argparse.ArgumentParser(description="Use the program in either Initialization or Verification mode:\n Example Initialization: siv -i -D important_directory -V verificationDB -R my_repoirt.txt -H sha1\n Example Verification: siv -v -D important_directory -V verificationDB -R my_report2.txt")
+    parser = argparse.ArgumentParser(description="Use the program in either Initialization or Verification mode:\n" +
+        "Example Initialization: siv -i -D important_directory -V verificationDB -R my_repoirt.txt -H sha1\n" +
+        "Example Verification: siv -v -D important_directory -V verificationDB -R my_report2.txt")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("-i", help="Initialization mode", action="store_true")
     group.add_argument("-v", help="Verification mode", action="store_true")
