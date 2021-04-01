@@ -28,18 +28,21 @@ def getFileInfo(folder, cursor, hashType):
         for name in files:
             nrOfFiles +=1
             filepath = os.path.join(root, name)
-            st = os.stat(filepath)
-            acessRight = oct(stat.S_IMODE(st.st_mode)) # wwww.stomp.colorado.edu
-            fileSize = st.st_size
-            userIdentiy = getpwuid(st.st_uid).pw_name
-            groupIdentity = getpwuid(st.st_gid).pw_name
-            lastModify = st.st_mtime
-
-            cHash = getFileHash(hashType, filepath)
-            cursor.execute("INSERT INTO info VALUES(?,?,?,?,?,?,?,0)",(filepath,fileSize,userIdentiy,groupIdentity,acessRight,lastModify,cHash))
+            writeFileInfoToDb(filepath, hashType, cursor)
 
     cursor.commit()
     return (nrOfDirs, nrOfFiles)
+
+def writeFileInfoToDb(filepath, hashType, cursor):
+    st = os.stat(filepath)
+    acessRight = oct(stat.S_IMODE(st.st_mode)) # wwww.stomp.colorado.edu
+    fileSize = st.st_size
+    userIdentiy = getpwuid(st.st_uid).pw_name
+    groupIdentity = getpwuid(st.st_gid).pw_name
+    lastModify = st.st_mtime
+    cHash = getFileHash(hashType, filepath)
+
+    cursor.execute("INSERT INTO info VALUES(?,?,?,?,?,?,?,0)",(filepath,fileSize,userIdentiy,groupIdentity,acessRight,lastModify,cHash))
 
 def getFileHash(hashType, filePath):
     if hashType == "MD-5":
@@ -63,14 +66,17 @@ def getFolderInfo(folder, cursor):
     for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
         for folderName in dirs:
             folderPath = os.path.join(root,folderName)
-            folderSt = os.stat(folderPath)
-            acessRight = oct(stat.S_IMODE(folderSt.st_mode))
-            userIdentiy = getpwuid(folderSt.st_uid).pw_name
-            groupIdentity = getpwuid(folderSt.st_gid).pw_name
-            lastModify = folderSt.st_mtime
-
-            cursor.execute("INSERT INTO infoFolders VALUES(?,?,?,?,?,0)",(folderPath,userIdentiy,groupIdentity,acessRight,lastModify))
+            writeFolderInfoToDb(folderPath, cursor)
     cursor.commit()
+
+def writeFolderInfoToDb(folderPath, cursor):
+    folderSt = os.stat(folderPath)
+    acessRight = oct(stat.S_IMODE(folderSt.st_mode))
+    userIdentiy = getpwuid(folderSt.st_uid).pw_name
+    groupIdentity = getpwuid(folderSt.st_gid).pw_name
+    lastModify = folderSt.st_mtime
+
+    cursor.execute("INSERT INTO infoFolders VALUES(?,?,?,?,?,0)",(folderPath,userIdentiy,groupIdentity,acessRight,lastModify))
 
 
 def getOldfileInfo(cursor,filepath):
