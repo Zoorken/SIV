@@ -35,18 +35,29 @@ def getFileInfo(folder, cursor, hashType):
             groupIdentity = getpwuid(st.st_gid).pw_name
             lastModify = st.st_mtime
 
-            # Should calculate some hashing
-            if(hashType == "MD-5"):
-                md5 = hashlib.md5()
-                cHash = calcHash(filepath, md5)
-            else:
-                sha1 = hashlib.sha1()
-                cHash = calcHash(filepath, sha1)
-
+            cHash = getFileHash(hashType, filepath)
             cursor.execute("INSERT INTO info VALUES(?,?,?,?,?,?,?,0)",(filepath,fileSize,userIdentiy,groupIdentity,acessRight,lastModify,cHash))
 
     cursor.commit()
     return (nrOfDirs, nrOfFiles)
+
+def getFileHash(hashType, filePath):
+    if hashType == "MD-5":
+        return calcHash(filePath, hashlib.md5())
+    elif hashType == "SHA-1":
+        return calcHash(filePath, hashlib.sha1())
+    else:
+        print("ERROR: Unkown hashtype {}".format(hashType))
+        quit()
+
+def calcHash(fileName, hashObj):
+    blocksize = 65536 # Reads a big chunck each time
+    afile = open(fileName, 'rb') # Read file binary
+    buf = afile.read(blocksize) # Read the first 65536 bytes
+    while len(buf) > 0:
+        hashObj.update(buf) # Att the buf to the function
+        buf = afile.read(blocksize) # Large files needs iterating
+    return hashObj.hexdigest() # Return the checksum
 
 def getFolderInfo(folder, cursor):
     for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
@@ -60,16 +71,6 @@ def getFolderInfo(folder, cursor):
 
             cursor.execute("INSERT INTO infoFolders VALUES(?,?,?,?,?,0)",(folderPath,userIdentiy,groupIdentity,acessRight,lastModify))
     cursor.commit()
-
-
-def calcHash(fileName, hashObj):
-    blocksize = 65536 # Reads a big chunck each time
-    afile = open(fileName, 'rb') # Read file binary
-    buf = afile.read(blocksize) # Read the first 65536 bytes
-    while len(buf) > 0:
-        hashObj.update(buf) # Att the buf to the function
-        buf = afile.read(blocksize) # Large files needs iterating
-    return hashObj.hexdigest() # Return the checksum
 
 
 def getOldfileInfo(cursor,filepath):
