@@ -103,8 +103,8 @@ def initializationMode(args):
     # check if verification and report file exists
     if os.path.isfile(args.V) or os.path.isfile(args.R):
         # User must do a choice
-        string = "Should we overwrite verification {} and report {} yes/no : ".format(args.V, args.R)
-        if userChoiceDeleteVerAndReport(args, string) == "no":
+        question = "Should we overwrite verification {} and report {} yes/no : ".format(args.V, args.R)
+        if userChoiceYesOrNo(question) == "no":
             print("The files will be preserved, goodbye")
             quit() # terminate the program
         else:
@@ -131,8 +131,8 @@ def verificationMode(args):
     print("Verification mode")
     if os.path.isfile(args.V): # Make sure the verification and report exists
         if os.path.isfile(args.R):
-            string = "Should we overwrite report {} yes/no : ".format(args.R)
-            if userChoiceDeleteVerAndReport(args, string) == "no":
+            question = "Should we overwrite report {} yes/no : ".format(args.R)
+            if userChoiceYesOrNo(question) == "no":
                 print("We can't continue, try again with different report file")
                 quit()
             else:
@@ -309,18 +309,18 @@ def verifyInitInputIfValid(args):
         quit()
 
     if os.path.isfile(args.V) or os.path.isfile(args.R):
-        s = "Should we overwrite verification {} and report {} yes/no : ".format(args.V, args.R)
-        if userChoiceDeleteVerAndReport(args, s) == "no":
+        question = "Should we overwrite verification {} and report {} yes/no : ".format(args.V, args.R)
+        if userChoiceYesOrNo(question) == "no":
             print("The files will be preserved, goodbye")
             quit()
         else:
             removeFile(args.V)
             removeFile(args.R)
 
-def userChoiceDeleteVerAndReport(args, string):
+def userChoiceYesOrNo(question):
     ans = ""
-    while(ans != "yes" and ans != "no"):
-        ans = input(string)
+    while(ans not in ["yes", "no"]):
+        ans = input(question)
     return ans
 
 def removeFile(f):
