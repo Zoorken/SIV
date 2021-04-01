@@ -2,17 +2,6 @@
 import argparse, os, stat, sqlite3, time, hashlib, csv
 from pwd import getpwuid
 
-def argumentParser():
-    parser = argparse.ArgumentParser(description="Use the program in either Initialization or Verification mode:\n Example Initialization: siv -i -D important_directory -V verificationDB -R my_repoirt.txt -H sha1\n Example Verification: siv -v -D important_directory -V verificationDB -R my_report2.txt")
-    parser.add_argument("-i", help="Initialization mode", action="store_true")
-    parser.add_argument("-v", help="Verification mode", action="store_true")
-    parser.add_argument("-D", help="Monitored directory", required=True)
-    parser.add_argument("-V", help="Verification file, not in monitored directory", required=True)
-    parser.add_argument("-R", help="Report file, not in monitored directory", required=True)
-    parser.add_argument("-H", help="Hash function", choices=["SHA-1", "MD-5"])
-    return parser.parse_args()
-
-
 def connect_db(filepath):
     print(filepath)
     return sqlite3.connect(filepath)
@@ -357,6 +346,16 @@ def checkUserInputIfValid(args):
 
     return flag
 
+def argumentParser():
+    parser = argparse.ArgumentParser(description="Use the program in either Initialization or Verification mode:\n Example Initialization: siv -i -D important_directory -V verificationDB -R my_repoirt.txt -H sha1\n Example Verification: siv -v -D important_directory -V verificationDB -R my_report2.txt")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("-i", help="Initialization mode", action="store_true")
+    group.add_argument("-v", help="Verification mode", action="store_true")
+    parser.add_argument("-D", help="Monitored directory", required=True)
+    parser.add_argument("-V", help="Verification file, not in monitored directory", required=True)
+    parser.add_argument("-R", help="Report file, not in monitored directory", required=True)
+    parser.add_argument("-H", help="Hash function", choices=["SHA-1", "MD-5"])
+    return parser.parse_args()
 
 def main():
     args = argumentParser()
@@ -364,9 +363,6 @@ def main():
         initializationMode(args)
     elif args.v:
         verificationMode(args)
-    else:
-        print("Error, need to choose Initialization or verification, 'python3 main.py -h' for help")
-
 
 if __name__ == "__main__":
     main()
