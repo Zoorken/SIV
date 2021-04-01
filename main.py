@@ -99,55 +99,40 @@ def initializationReport(monitoreDirectory, pathVerification, nrOfDir, nrofFiles
 
 def initializationMode(args):
     print("Initialization mode\n")
-    if(os.path.isdir(args.D)): # Check if directory exist
-        print("{} exists".format(args.D))
-        if args.D not in args.V and args.D not in args.R: # Check if the paths is outside the directory
-            if os.path.isdir(args.V) or os.path.isdir(args.R):
-                print("Need to specify a file for verification file and report file")
-                quit()
-
-            print("Verification and report ok")
-            # check if verification and report file exists
-            if args.H == "MD-5" or args.H == "SHA-1":
-                if os.path.isfile(args.V) or os.path.isfile(args.R):
-                    # User must do a choice
-                    string = "Should we overwrite verification {} and report {} yes/no : ".format(args.V, args.R)
-                    if userChoiceDeleteVerandReport(args, string) == "no":
-                        print("The files will be preserved, goodbye")
-                        quit() # terminate the program
-                    else:
-                        if os.path.isfile(args.V):
-                            os.remove(args.V)
-                        if os.path.isfile(args.R):
-                            os.remove(args.R)
-                # Continue if this was the users will
-                print("Creates new report file and verification file")
-                startTime = time.time()
-
-                cursor = dbCreateTable(args.V)
-                sethashTypeDB(cursor, args.H) # Now we have stored which type hash is
-
-                nrOfDirs, nrOfFiles = getFileInfo(args.D, cursor, args.H)
-                getFolderInfo(args.D, cursor) # Get information about all the folders
-                cursor.close() # close db connection
-                initializationReport(args.D, args.V, nrOfDirs, nrOfFiles, startTime, args.R)
-                print("Done with Initialization")
-            else:
-                print("You must choose a hash function either, -H SHA-1 or MD5")
+    verifyInitInputIfValid(args)
+    # check if verification and report file exists
+    if os.path.isfile(args.V) or os.path.isfile(args.R):
+        # User must do a choice
+        string = "Should we overwrite verification {} and report {} yes/no : ".format(args.V, args.R)
+        if userChoiceDeleteVerAndReport(args, string) == "no":
+            print("The files will be preserved, goodbye")
+            quit() # terminate the program
         else:
-            print("Verification: {}\n Report: {} \n can't be inside: directory {}\n please specify outside {}".format(args.V, args.R, args.D, args.D))
-    else: #isdir args.D
-        print("Directory {} is not existing".format(args.D))
+            if os.path.isfile(args.V):
+                os.remove(args.V)
+            if os.path.isfile(args.R):
+                os.remove(args.R)
+    # Continue if this was the users will
+    print("Creates new report file and verification file")
+    startTime = time.time()
+
+    cursor = dbCreateTable(args.V)
+    sethashTypeDB(cursor, args.H) # Now we have stored which type hash is
+
+    nrOfDirs, nrOfFiles = getFileInfo(args.D, cursor, args.H)
+    getFolderInfo(args.D, cursor) # Get information about all the folders
+    cursor.close() # close db connection
+    initializationReport(args.D, args.V, nrOfDirs, nrOfFiles, startTime, args.R)
+    print("Done with Initialization")
 
 
 
 def verificationMode(args):
-    verifyModeverifyModeAbortInvalidUserInput(args)
     print("Verification mode")
     if os.path.isfile(args.V): # Make sure the verification and report exists
         if os.path.isfile(args.R):
             string = "Should we overwrite report {} yes/no : ".format(args.R)
-            if userChoiceDeleteVerandReport(args, string) == "no":
+            if userChoiceDeleteVerAndReport(args, string) == "no":
                 print("We can't continue, try again with different report file")
                 quit()
             else:
@@ -318,20 +303,37 @@ def removeFiles(args):
         print("Error occured while removing {} and {},\n The program will exit".format(args.V, args.R))
         quit()
 
-def userChoiceDeleteVerandReport(args, string):
+def verifyInitInputIfValid(args):
+    if args.H not in ['MD-5', 'SHA-1']:
+        print("You must choose a hash function either, -H SHA-1 or MD5")
+        quit()
+
+    if os.path.isfile(args.V) or os.path.isfile(args.R):
+        s = "Should we overwrite verification {} and report {} yes/no : ".format(args.V, args.R)
+        if userChoiceDeleteVerAndReport(args, s) == "no":
+            print("The files will be preserved, goodbye")
+            quit()
+        else:
+            removeFile(args.V)
+            removeFile(args.R)
+
+def userChoiceDeleteVerAndReport(args, string):
     ans = ""
     while(ans != "yes" and ans != "no"):
         ans = input(string)
     return ans
 
+def removeFile(f):
+    if os.path.isfile(f):
+        os.remove(f)
+        print("Deleted {}".format(f))
 
-def verifyModeverifyModeAbortInvalidUserInput(args):
+def verifyCommonInputAbortIfInvalid(args):
     inputMonitoredDirectoryValid(args)
     inputDirNotInMetadataFiles(args.D, args.V, args.R)
     inputIsDir(args.V, '-V')
     inputIsDir(args.R, '-R')
     print("Verification and report ok")
-    return True
 
 def inputMonitoredDirectoryValid(args):
     if not os.path.isdir(args.D):
@@ -364,6 +366,7 @@ def argumentParser():
 
 def main():
     args = argumentParser()
+    verifyCommonInputAbortIfInvalid(args)
     if args.i:
         initializationMode(args)
     elif args.v:
