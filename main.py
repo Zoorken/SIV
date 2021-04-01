@@ -294,15 +294,6 @@ def reportFileVerification(monitoreDirectory, pathVerification, reportFile, nrOf
     fprint.write(ss)
     fprint.close()
 
-
-def removeFiles(args):
-    if os.path.isfile(args.V) and os.path.isfile(args.R):
-        os.remove(args.V)
-        os.path.isfile(args.R)
-    else:
-        print("Error occured while removing {} and {},\n The program will exit".format(args.V, args.R))
-        quit()
-
 def verifyInitInputIfValid(args):
     if args.H not in ['MD-5', 'SHA-1']:
         print("You must choose a hash function either, -H SHA-1 or MD5")
