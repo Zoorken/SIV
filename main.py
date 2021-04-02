@@ -2,6 +2,36 @@
 import argparse, os, stat, sqlite3, time, hashlib, csv
 from pwd import getpwuid
 
+
+class FileObj:
+    def __init__(self, path):
+        self.path = path
+        self.st = self.setOsStat()
+        self.accessRight = self.setAccessRight()
+        self.size = self.setSize()
+        self.userIdentiy = self.setUserIdentiy()
+        self.groupIdentity = self.setGroupIdentity()
+        self.lastModify = self.setLastModify()
+
+    def setOsStat(self):
+        return os.stat(self.path)
+
+    def setAccessRight(self):
+        return oct(stat.S_IMODE(self.st.st_mode)) #wwww.stomp.colorado.edu
+
+    def setSize(self):
+        return self.st.st_size
+
+    def setUserIdentiy(self):
+        return getpwuid(self.st.st_uid).pw_name
+
+    def setGroupIdentity(self):
+        return getpwuid(self.st.st_gid).pw_name
+
+    def setLastModify(self):
+        return self.st.st_mtime
+
+
 def connect_db(filepath):
     print(filepath)
     return sqlite3.connect(filepath)
@@ -28,21 +58,15 @@ def getFileInfo(folder, cursor, hashType):
         for name in files:
             nrOfFiles +=1
             filepath = os.path.join(root, name)
-            writeFileInfoToDb(filepath, hashType, cursor)
+            fObj = FileObj(filepath)
+            cHash = getFileHash(hashType, filepath)
+            writeFileInfoToDb(fObj, cHash, cursor)
 
     cursor.commit()
     return (nrOfDirs, nrOfFiles)
 
-def writeFileInfoToDb(filepath, hashType, cursor):
-    st = os.stat(filepath)
-    acessRight = oct(stat.S_IMODE(st.st_mode)) # wwww.stomp.colorado.edu
-    fileSize = st.st_size
-    userIdentiy = getpwuid(st.st_uid).pw_name
-    groupIdentity = getpwuid(st.st_gid).pw_name
-    lastModify = st.st_mtime
-    cHash = getFileHash(hashType, filepath)
-
-    cursor.execute("INSERT INTO info VALUES(?,?,?,?,?,?,?,0)",(filepath,fileSize,userIdentiy,groupIdentity,acessRight,lastModify,cHash))
+def writeFileInfoToDb(f, cHash, cursor):
+    cursor.execute("INSERT INTO info VALUES(?,?,?,?,?,?,?,0)",(f.path,f.size,f.userIdentiy,f.groupIdentity,f.accessRight,f.lastModify,cHash))
 
 def getFileHash(hashType, filePath):
     if hashType == "MD-5":
