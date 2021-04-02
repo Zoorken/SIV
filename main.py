@@ -31,6 +31,9 @@ class FileObj:
     def setLastModify(self):
         return self.st.st_mtime
 
+    def getSizeInInt(self):
+        return int(self.size)
+
 
 def connect_db(filepath):
     print(filepath)
@@ -187,7 +190,6 @@ def metadataExistUserDetermineWhatToDo(f):
             os.remove(f)
 
 def compare(folder, cursor, hashType):
-    fileChanged = False
     nrOfDirs = 0
     nrOfFiles = 0
     nrOfWarnings = 0
@@ -196,61 +198,55 @@ def compare(folder, cursor, hashType):
         nrOfDirs += 1
         for name in files:
             nrOfFiles += 1
-            fileChanged = False
             filepath = os.path.join(root, name)
-            oldInfo = getOldfileInfo(cursor,filepath)
-            if oldInfo == None:
-                nrOfWarnings +=1
+            dbFileInfo = getOldfileInfo(cursor, filepath)
+
+            if dbFileInfo is None:
+                nrOfWarnings += 1
                 print("NEW FILE: {}".format(filepath))
                 ssChangedFiles += "NEW FILE: {}\n".format(filepath)
             else:
                 # Retrive latest information about files
-                st = os.stat(filepath)
-                acessRight = oct(stat.S_IMODE(st.st_mode)) #wwww.stomp.colorado.edu
-                fileSize = st.st_size
-                userIdentiy = getpwuid(st.st_uid).pw_name
-                groupIdentity = getpwuid(st.st_gid).pw_name
-                lastModify = st.st_mtime
+                cHash = getFileHash(hashType, filepath)
+                errorMsg = compareWithDbFile(filepath, cHash, dbFileInfo)
 
-                # Should calculate some hashing
-                if(hashType == "MD-5"):
-                    md5 = hashlib.md5()
-                    cHash = calcHash(filepath, md5)
-                else:
-                    sha1 = hashlib.sha1()
-                    cHash = calcHash(filepath, sha1)
-
-                #Compare the files with the one in db
-                errorMsg = "CHANGED: File {} ".format(filepath)
-                if oldInfo[5] != lastModify:
-                    fileChanged = True
-                    errorMsg += ", prev changes where made {} new changes {}".format(oldInfo[5], lastModify)
-                    # File has been modified from db version
-                if oldInfo[1] != int(fileSize):
-                    fileChanged = True
-                    errorMsg += ", fileSize from {} to {}".format(oldInfo[1],fileSize)
-                if oldInfo[2] != userIdentiy:
-                    fileChanged = True
-                    errorMsg += ", useridentify from {} to {}".format(oldInfo[2], userIdentiy)
-                if oldInfo[3] != groupIdentity:
-                    fileChanged = True
-                    errorMsg += ", groupidentiy from {} to {}".format(oldInfo[3], groupIdentity)
-                if oldInfo[4] != str(acessRight):
-                    fileChanged = True
-                    errorMsg += ", accessright from {} to {}".format(oldInfo[4], acessRight)
-                if oldInfo[6] != cHash:
-                    fileChanged = True
-                    errorMsg += ", file content compromized, hash not same"
-
-                if fileChanged:
-                    nrOfWarnings +=1
-                    print(errorMsg + "\n")
+                if errorMsg:
+                    nrOfWarnings += 1
                     ssChangedFiles += errorMsg + "\n"
 
                 cursor.execute('UPDATE info SET checked=? WHERE fPath =?',(1,filepath))
         cursor.commit()
 
     return (nrOfWarnings,nrOfDirs,nrOfFiles,ssChangedFiles)
+
+def compareWithDbFile(filepath, cHash, dbFile):
+    diff = False
+    fileObj = FileObj(filepath)
+    eMsg = ''
+    if dbFile[5] != fileObj.lastModify:
+        diff = True
+        eMsg += ", prev changes where made {} new changes {}".format(dbFile[5], fileObj.lastModify)
+    if dbFile[1] != fileObj.getSizeInInt():
+        diff = True
+        eMsg += ", fileSize from {} to {}".format(dbFile[1], fileObj.getSizeInInt())
+    if dbFile[2] != fileObj.userIdentiy:
+        diff = True
+        eMsg += ", useridentify from {} to {}".format(dbFile[2], fileObj.userIdentiy)
+    if dbFile[3] != fileObj.groupIdentity:
+        diff = True
+        eMsg += ", groupidentiy from {} to {}".format(dbFile[3], fileObj.groupIdentity)
+    if dbFile[4] != str(fileObj.accessRight):
+        diff = True
+        eMsg += ", accessright from {} to {}".format(dbFile[4], fileObj.accessRight)
+    if dbFile[6] != cHash:
+        diff = True
+        eMsg += ", file content compromised, hash differ"
+
+    if diff:
+        eMsg = "CHANGED: File {} ".format(fileObj.path) + eMsg
+        print(eMsg + "\n")
+
+    return eMsg
 
 def compareFolders(folder, cursor, nrOfWarnings):
     ssChangedFiles = ""
