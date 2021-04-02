@@ -110,19 +110,9 @@ def calcElapsedTime(startTime):
 def initializationMode(args):
     print("Initialization mode\n")
     verifyInitInputIfValid(args)
-    # check if verification and report file exists
-    if os.path.isfile(args.V) or os.path.isfile(args.R):
-        # User must do a choice
-        question = "Should we overwrite verification {} and report {} yes/no : ".format(args.V, args.R)
-        if userChoiceYesOrNo(question) == "no":
-            print("The files will be preserved, goodbye")
-            quit() # terminate the program
-        else:
-            if os.path.isfile(args.V):
-                os.remove(args.V)
-            if os.path.isfile(args.R):
-                os.remove(args.R)
-    # Continue if this was the users will
+    metadataExistUserDetermineWhatToDo(args.V)
+    metadataExistUserDetermineWhatToDo(args.R)
+
     print("Creates new report file and verification file")
     startTime = time.time()
 
@@ -139,32 +129,38 @@ def initializationMode(args):
 
 def verificationMode(args):
     print("Verification mode")
-    if os.path.isfile(args.V): # Make sure the verification and report exists
-        if os.path.isfile(args.R):
-            question = "Should we overwrite report {} yes/no : ".format(args.R)
-            if userChoiceYesOrNo(question) == "no":
-                print("We can't continue, try again with different report file")
-                quit()
-            else:
-                os.remove(args.R)
-        ###########
-        # Start verification process
-        ##########
-        startTime = time.time()
-        cursor = connect_db(args.V)
-        hashType = getHashTypeInfo(cursor)
-        print(hashType)
-        nrOfWarnings, nrOfDirs, nrOfFiles, ssChangedFiles = compare(args.D, cursor, hashType)
-        nrOfWarnings, ssChangedFiles = compareFolders(args.D, cursor, nrOfWarnings)
-        nrOfWarnings, ssChangedFiles = deletedFiles(cursor, nrOfWarnings, ssChangedFiles)
-        nrOfWarnings, ssChangedFiles = deletedFolders(cursor, nrOfWarnings, ssChangedFiles)
+    abortMissingFile(args.V)
+    metadataExistUserDetermineWhatToDo(args.R)
+    ###########
+    # Start verification process
+    ##########
+    startTime = time.time()
+    cursor = connect_db(args.V)
+    hashType = getHashTypeInfo(cursor)
+    print(hashType)
+    nrOfWarnings, nrOfDirs, nrOfFiles, ssChangedFiles = compare(args.D, cursor, hashType)
+    nrOfWarnings, ssChangedFiles = compareFolders(args.D, cursor, nrOfWarnings)
+    nrOfWarnings, ssChangedFiles = deletedFiles(cursor, nrOfWarnings, ssChangedFiles)
+    nrOfWarnings, ssChangedFiles = deletedFolders(cursor, nrOfWarnings, ssChangedFiles)
 
-        reportFileVerification(args.D, args.V, args.R, nrOfDirs, nrOfFiles, nrOfWarnings,startTime, ssChangedFiles)
-        # Clean up
-        cursor.execute('UPDATE info SET checked=? WHERE checked =?',(0,1)) # Changed it back
-        cursor.commit() # Change it back
-    else:
-        print("Verification db don't exists")
+    reportFileVerification(args.D, args.V, args.R, nrOfDirs, nrOfFiles, nrOfWarnings,startTime, ssChangedFiles)
+    # Clean up
+    cursor.execute('UPDATE info SET checked=? WHERE checked =?',(0,1)) # Changed it back
+    cursor.commit() # Change it back
+
+def abortMissingFile(f):
+    if not os.path.isfile(f):
+        print("ERROR: The file: {} is missing.".format(f))
+        quit()
+
+def metadataExistUserDetermineWhatToDo(f):
+    if os.path.isfile(f):
+        q = "Should we overwrite file: {} yes/no : ".format(f)
+        if userChoiceYesOrNo(q) == "no":
+            print("We can't continue, try again with different file input")
+            quit()
+        else:
+            os.remove(f)
 
 def compare(folder, cursor, hashType):
     fileChanged = False
