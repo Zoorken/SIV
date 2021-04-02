@@ -96,13 +96,16 @@ def getHashTypeInfo(cursor):
 
 
 def initializationReport(monitoreDirectory, pathVerification, nrOfDir, nrofFiles, startTime, reportFile):
-    ss = "Monitored directory :" + monitoreDirectory + "\n" + "Verification file :" + pathVerification + "\n" + "Nr of directorys :" + str(nrOfDir) + "\n" + "Nr of files :" + str(nrofFiles) + "\n"
+    ss = "Monitored directory : {}\nVerification file : {}\nNr of directories : {}\n" \
+         "Nr of files : {}\n".format(monitoreDirectory, pathVerification, str(nrOfDir), str(nrofFiles))
+
     fprint = open(reportFile,"w")
-    elapsedTime = time.time() - startTime
-    ss += "Time to complete in seconds :" + str(elapsedTime) + "\n"
+    ss += "Time to complete in seconds :" + calcElapsedTime(startTime) + "\n"
     fprint.write(ss)
     fprint.close()
 
+def calcElapsedTime(startTime):
+    return str(time.time() - startTime)
 
 def initializationMode(args):
     print("Initialization mode\n")
