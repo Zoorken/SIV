@@ -59,7 +59,7 @@ def getFileInfo(folder, cursor, hashType):
     for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
         nrOfDirs += 1
         for name in files:
-            nrOfFiles +=1
+            nrOfFiles += 1
             filepath = os.path.join(root, name)
             fObj = FileObj(filepath)
             cHash = getFileHash(hashType, filepath)
@@ -126,10 +126,9 @@ def initializationReport(monitoreDirectory, pathVerification, nrOfDir, nrofFiles
     ss = "Monitored directory : {}\nVerification file : {}\nNr of directories : {}\n" \
          "Nr of files : {}\n".format(monitoreDirectory, pathVerification, str(nrOfDir), str(nrofFiles))
 
-    fprint = open(reportFile,"w")
-    ss += "Time to complete in seconds :" + calcElapsedTime(startTime) + "\n"
-    fprint.write(ss)
-    fprint.close()
+    with open(reportFile, "w") as f:
+        ss += "Time to complete in seconds :" + calcElapsedTime(startTime) + "\n"
+        f.write(ss)
 
 def calcElapsedTime(startTime):
     return str(time.time() - startTime)
@@ -170,7 +169,7 @@ def verificationMode(args):
     nrOfWarnings, ssChangedFiles = deletedFiles(cursor, nrOfWarnings, ssChangedFiles)
     nrOfWarnings, ssChangedFiles = deletedFolders(cursor, nrOfWarnings, ssChangedFiles)
 
-    reportFileVerification(args.D, args.V, args.R, nrOfDirs, nrOfFiles, nrOfWarnings,startTime, ssChangedFiles)
+    reportFileVerification(startTime, args.D, args.V, args.R, nrOfDirs, nrOfFiles, nrOfWarnings, ssChangedFiles)
     # Clean up
     cursor.execute('UPDATE info SET checked=? WHERE checked =?',(0,1)) # Changed it back
     cursor.commit() # Change it back
@@ -311,14 +310,13 @@ def deletedFolders(cursor, nrOfWarnings, ssChangedFiles):
         ssChangedFiles += "Folder deleted: {}\n".format(row[0])
     return (nrOfWarnings, ssChangedFiles)
 
-def reportFileVerification(monitoreDirectory, pathVerification, reportFile, nrOfDir, nrOfFiles, nrOfWarnings, startTime, ssChangedFiles):
+def reportFileVerification(startTime, monitoreDirectory, pathVerification, reportFile, nrOfDir, nrOfFiles, nrOfWarnings, ssChangedFiles):
     ss = "Monitored directory: " + os.path.abspath(monitoreDirectory) + "\nVerification file: " + os.path.abspath(pathVerification) + "\nReport file: "+ os.path.abspath(reportFile) + "\nNr of directorys: " + str(nrOfDir) + "\nNr of files: " + str(nrOfFiles) + "\nNr of warnings: " + str(nrOfWarnings)
-    fprint = open(reportFile,"w")
-    elapsedTime = time.time() - startTime
-    ss += "\nTime to complete in seconds: " + str(int(round(elapsedTime))) + "\n"
-    ss += ssChangedFiles
-    fprint.write(ss)
-    fprint.close()
+    with open(reportFile, 'w') as f:
+        elapsedTime = time.time() - startTime
+        ss += "\nTime to complete in seconds: " + str(int(round(elapsedTime))) + "\n"
+        ss += ssChangedFiles
+        f.write(ss)
 
 def verifyInitInputIfValid(args):
     if args.H not in ['MD-5', 'SHA-1']:
