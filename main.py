@@ -63,22 +63,85 @@ class DiffReport:
     def getSSReport(self):
         return f"Nr of directories: {self.dirs}\nNr of files: {self.files}\nNr of warnings: {self.warnings}\n{self.ssChangedFiles}"
 
-def connect_db(filepath):
-    print("db filepath: {}".format(filepath))
-    return sqlite3.connect(filepath)
+
+class DB:
+
+    @staticmethod
+    def connect(filepath):
+        print("db filepath: {}".format(filepath))
+        return sqlite3.connect(filepath)
 
 
-def dbCreateTable(filepath):
-    cursor = connect_db(filepath)
-    cursor.execute("CREATE table info (fPath TEXT UNIQUE, fileSize INT, userIdentidy TEXT, groupIdentity Text, acessRight Text, lastModify INT,hashMode Text, checked INT)")
-    cursor.execute("CREATE table infoFolders (fPath TEXT UNIQUE, userIdentiy TEXT, groupIdentity TEXT, acessRight TEXT, lastModify INT, checked INT)")
-    cursor.execute("CREATE table config (hashMode TEXT)")
-    return cursor
+    @staticmethod
+    def createTable(cursor):
+        cursor.execute("CREATE table info (fPath TEXT UNIQUE, fileSize INT, userIdentidy TEXT, groupIdentity Text, acessRight Text, lastModify INT,hashMode Text, checked INT)")
+        cursor.execute("CREATE table infoFolders (fPath TEXT UNIQUE, userIdentiy TEXT, groupIdentity TEXT, acessRight TEXT, lastModify INT, checked INT)")
+        cursor.execute("CREATE table config (hashMode TEXT)")
 
-def sethashTypeDB(cursor, hashType):
-    cursor.execute("INSERT INTO config VALUES(?)",(hashType,))
-    cursor.commit()
-    print("HashMode: {}".format(hashType))
+
+    @staticmethod
+    def writeHash(cursor, hashType):
+        cursor.execute("INSERT INTO config VALUES(?)",(hashType,))
+        cursor.commit()
+        print("HashMode: {}".format(hashType))
+
+
+    @staticmethod
+    def writeFileInfo(cursor, f, cHash):
+        cursor.execute("INSERT INTO info VALUES(?,?,?,?,?,?,?,0)",(f.path,f.size,f.userIdentiy,f.groupIdentity,f.accessRight,f.lastModify,cHash))
+
+
+    @staticmethod
+    def writeFolderInfo(cursor, folderPath, userIdentiy, groupIdentity, acessRight, lastModify):
+        cursor.execute("INSERT INTO infoFolders VALUES(?,?,?,?,?,0)",(folderPath,userIdentiy,groupIdentity,acessRight,lastModify))
+
+
+    @staticmethod
+    def updateInfoFolders(cursor, fPath):
+        cursor.execute('UPDATE infoFolders SET checked=? WHERE fPath =?',(1,fPath))
+
+
+    @staticmethod
+    def updateInfoFiles(cursor, fPath):
+        cursor.execute('UPDATE info SET checked=? WHERE fPath =?',(1,fPath))
+
+
+    @staticmethod
+    def getHashType(cursor):
+        cursor = cursor.execute('SELECT * FROM config')
+        for row in cursor:
+            return row[0]
+
+
+    @staticmethod
+    def getFileInfo(cursor, filepath):
+        cursor = cursor.execute('SELECT * FROM info WHERE fPath=?',(filepath,))
+        for row in cursor:
+            return row
+
+
+    @staticmethod
+    def getFolderInfo(cursor, filepath):
+        cursor = cursor.execute('SELECT * FROM infoFolders WHERE fPath=?',(filepath,))
+        for row in cursor:
+            return row
+
+
+    @staticmethod
+    def getDeletedFiles(cursor):
+        return cursor.execute('SELECT * FROM info WHERE checked=?',(0,))
+
+
+    @staticmethod
+    def getDeletedFolders(cursor):
+        return cursor.execute('SELECT * FROM infoFolders WHERE checked=?',(0,))
+
+
+    @staticmethod
+    def updateInfoCleanup(cursor):
+        # Unsure what this does. Keeping it
+        cursor.execute('UPDATE info SET checked=? WHERE checked =?',(0,1)) # Changed it back
+        cursor.commit()
 
 
 def getFileInfo(folder, cursor):
@@ -91,16 +154,13 @@ def getFileInfo(folder, cursor):
             filepath = os.path.join(root, name)
             fObj = FileObj(filepath)
             cHash = getFileHash(cursor, filepath)
-            writeFileInfoToDb(fObj, cHash, cursor)
+            DB.writeFileInfo(cursor, fObj, cHash)
 
     cursor.commit()
     return (nrOfDirs, nrOfFiles)
 
-def writeFileInfoToDb(f, cHash, cursor):
-    cursor.execute("INSERT INTO info VALUES(?,?,?,?,?,?,?,0)",(f.path,f.size,f.userIdentiy,f.groupIdentity,f.accessRight,f.lastModify,cHash))
-
 def getFileHash(cursor, filePath):
-    hashType = getHashTypeDb(cursor)
+    hashType = DB.getHashType(cursor)
     if hashType == "MD-5":
         return calcHash(filePath, hashlib.md5())
     elif hashType == "SHA-1":
@@ -108,11 +168,6 @@ def getFileHash(cursor, filePath):
     else:
         print("ERROR: Unkown hashtype {}".format(hashType))
         quit()
-
-def getHashTypeDb(cursor):
-    cursor = cursor.execute('SELECT * FROM config')
-    for row in cursor:
-        return row[0]
 
 def calcHash(fileName, hashObj):
     blocksize = 65536 # Reads a big chunck each time
@@ -137,18 +192,7 @@ def writeFolderInfoToDb(folderPath, cursor):
     groupIdentity = getpwuid(folderSt.st_gid).pw_name
     lastModify = folderSt.st_mtime
 
-    cursor.execute("INSERT INTO infoFolders VALUES(?,?,?,?,?,0)",(folderPath,userIdentiy,groupIdentity,acessRight,lastModify))
-
-
-def getOldfileInfo(cursor,filepath):
-    cursor = cursor.execute('SELECT * FROM info WHERE fPath=?',(filepath,))
-    for row in cursor:
-        return row
-
-def getOldFolderInfo(cursor,filepath):
-    cursor = cursor.execute('SELECT * FROM infoFolders WHERE fPath=?',(filepath,))
-    for row in cursor:
-        return row
+    DB.writeFolderInfo(folderPath, userIdentiy, groupIdentity, acessRight, lastModify)
 
 def initializationReport(monitoreDirectory, pathVerification, nrOfDir, nrofFiles, startTime, reportFile):
     ss = "Monitored directory : {}\nVerification file : {}\nNr of directories : {}\n" \
@@ -169,13 +213,15 @@ def initializationMode(args):
 
     print("Creates new report file and verification file")
     startTime = time.time()
+    cursor = DB.connect(args.V)
 
-    cursor = dbCreateTable(args.V)
-    sethashTypeDB(cursor, args.H)
+    DB.createTable(cursor)
+    DB.writeHash(cursor, args.H)
 
     nrOfDirs, nrOfFiles = getFileInfo(args.D, cursor)
     getFolderInfo(args.D, cursor) # Get information about all the folders
     cursor.close() # close db connection
+
     initializationReport(args.D, args.V, nrOfDirs, nrOfFiles, startTime, args.R)
     print("Done with Initialization")
 
@@ -189,7 +235,7 @@ def verificationMode(args):
     # Start verification process
     ##########
     startTime = time.time()
-    cursor = connect_db(args.V)
+    cursor = DB.connect(args.V)
 
     filesReport = compare(args.D, cursor)
     folderReport = compareFolders(args.D, cursor)
@@ -199,9 +245,9 @@ def verificationMode(args):
     report = filesReport + folderReport + deletedFilesReport + deletedFolderReport
 
     reportFileVerification(startTime, args, report.getSSReport())
-    # Clean up
-    cursor.execute('UPDATE info SET checked=? WHERE checked =?',(0,1)) # Changed it back
-    cursor.commit() # Change it back
+    # Cleanup
+    DB.updateInfoCleanup(cursor)
+    print("Verification mode done")
 
 def abortMissingFile(f):
     if not os.path.isfile(f):
@@ -224,7 +270,7 @@ def compare(folder, cursor):
         for name in files:
             diffReport.incrementFiles
             filepath = os.path.join(root, name)
-            dbFileInfo = getOldfileInfo(cursor, filepath)
+            dbFileInfo = DB.getFileInfo(cursor, filepath)
 
             if dbFileInfo is None:
                 ss = "NEW FILE: {}".format(filepath)
@@ -240,7 +286,7 @@ def compare(folder, cursor):
                     diffReport.incrementWarnings()
                     ssChangedFiles += errorMsg + "\n"
 
-                cursor.execute('UPDATE info SET checked=? WHERE fPath =?',(1,filepath))
+                DB.updateInfoFiles(cursor, filepath)
         cursor.commit()
 
     return diffReport
@@ -280,7 +326,7 @@ def compareFolders(folder, cursor):
         for name in dirs:
             itemChanged = False
             fPath = os.path.join(root, name)
-            oldInfo = getOldFolderInfo(cursor,fPath)
+            oldInfo = DB.getFolderInfo(cursor, fPath)
 
             if oldInfo == None:
                 ss = "NEW FOLDER: {}".format(fPath)
@@ -317,14 +363,14 @@ def compareFolders(folder, cursor):
                     diffReport.incrementWarnings()
                     diffReport.appendChangedFile(ss)
 
-                cursor.execute('UPDATE infoFolders SET checked=? WHERE fPath =?',(1,fPath))
+                DB.updateInfoFolders(cursor, fPath)
         cursor.commit()
 
     return diffReport
 
 def deletedFiles(cursor):
     report = DiffReport()
-    cursor = cursor.execute('SELECT * FROM info WHERE checked=?',(0,))
+    cursor = DB.getDeletedFiles(cursor)
     for row in cursor:
         ss = "File deleted: {}".format(row[0])
         print(ss)
@@ -335,7 +381,7 @@ def deletedFiles(cursor):
 
 def deletedFolders(cursor):
     report = DiffReport()
-    cursor = cursor.execute('SELECT * FROM infoFolders WHERE checked=?',(0,))
+    cursor = DB.getDeletedFolders(cursor)
     for row in cursor:
         ss = "Folder deleted: {}".format(row[0])
         print(ss)
