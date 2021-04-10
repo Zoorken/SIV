@@ -34,6 +34,30 @@ class FileObj:
     def getSizeInInt(self):
         return int(self.size)
 
+class DiffReport:
+    def __init__(self):
+        self.dirs = 0
+        self.files = 0
+        self.ssChangedFiles = ""
+        self.warnings = 0
+
+    def incrementDirs(self):
+        self.dirs += 1
+
+    def incrementFiles(self):
+        self.files += 1
+
+    def appendChangedFile(self, ssChangedFile):
+        self.ssChangedFiles += ssChangedFile
+
+    def incrementWarnings(self):
+        self.warnings += 1
+
+    def incrementWithDiffReport(self, report):
+        self.dirs += report.dirs
+        self.files += report.files
+        self.ssChangedFiles += report.ssChangedFiles
+        self.warnings += report.warnings
 
 def connect_db(filepath):
     print("db filepath: {}".format(filepath))
@@ -163,12 +187,18 @@ def verificationMode(args):
     startTime = time.time()
     cursor = connect_db(args.V)
 
-    nrOfWarnings, nrOfDirs, nrOfFiles, ssChangedFiles = compare(args.D, cursor)
-    nrOfWarnings, ssChangedFiles = compareFolders(args.D, cursor, nrOfWarnings)
-    nrOfWarnings, ssChangedFiles = deletedFiles(cursor, nrOfWarnings, ssChangedFiles)
-    nrOfWarnings, ssChangedFiles = deletedFolders(cursor, nrOfWarnings, ssChangedFiles)
+    filesReport = compare(args.D, cursor)
+    folderReport = compareFolders(args.D, cursor)
+    deletedFilesReport = deletedFiles(cursor)
+    deletedFolderReport = deletedFolders(cursor)
 
-    reportFileVerification(startTime, args.D, args.V, args.R, nrOfDirs, nrOfFiles, nrOfWarnings, ssChangedFiles)
+    report = DiffReport()
+    report.incrementWithDiffReport(filesReport)
+    report.incrementWithDiffReport(folderReport)
+    report.incrementWithDiffReport(deletedFilesReport)
+    report.incrementWithDiffReport(deletedFolderReport)
+
+    reportFileVerification(startTime, args.D, args.V, args.R, report.dirs, report.files, report.warnings, report.ssChangedFiles)
     # Clean up
     cursor.execute('UPDATE info SET checked=? WHERE checked =?',(0,1)) # Changed it back
     cursor.commit() # Change it back
@@ -188,34 +218,32 @@ def metadataExistUserDetermineWhatToDo(f):
             os.remove(f)
 
 def compare(folder, cursor):
-    nrOfDirs = 0
-    nrOfFiles = 0
-    nrOfWarnings = 0
-    ssChangedFiles = ""
+    diffReport = DiffReport()
     for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
-        nrOfDirs += 1
+        diffReport.incrementDirs()
         for name in files:
-            nrOfFiles += 1
+            diffReport.incrementFiles
             filepath = os.path.join(root, name)
             dbFileInfo = getOldfileInfo(cursor, filepath)
 
             if dbFileInfo is None:
-                nrOfWarnings += 1
-                print("NEW FILE: {}".format(filepath))
-                ssChangedFiles += "NEW FILE: {}\n".format(filepath)
+                ss = "NEW FILE: {}".format(filepath)
+                print(ss)
+                diffReport.incrementWarnings()
+                diffReport.appendChangedFile(ss)
             else:
                 # Retrive latest information about files
                 cHash = getFileHash(cursor, filepath)
                 errorMsg = compareWithDbFile(filepath, cHash, dbFileInfo)
 
                 if errorMsg:
-                    nrOfWarnings += 1
+                    diffReport.incrementWarnings()
                     ssChangedFiles += errorMsg + "\n"
 
                 cursor.execute('UPDATE info SET checked=? WHERE fPath =?',(1,filepath))
         cursor.commit()
 
-    return (nrOfWarnings,nrOfDirs,nrOfFiles,ssChangedFiles)
+    return diffReport
 
 def compareWithDbFile(filepath, cHash, dbFile):
     diff = False
@@ -246,8 +274,8 @@ def compareWithDbFile(filepath, cHash, dbFile):
 
     return eMsg
 
-def compareFolders(folder, cursor, nrOfWarnings):
-    ssChangedFiles = ""
+def compareFolders(folder, cursor):
+    diffReport = DiffReport()
     for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
         for name in dirs:
             itemChanged = False
@@ -255,9 +283,10 @@ def compareFolders(folder, cursor, nrOfWarnings):
             oldInfo = getOldFolderInfo(cursor,fPath)
 
             if oldInfo == None:
-                nrOfWarnings +=1
-                print("NEW FOLDER: {}".format(fPath))
-                ssChangedFiles += "NEW FOLDER: {}\n".format(fPath)
+                ss = "NEW FOLDER: {}".format(fPath)
+                print(ss)
+                diffReport.incrementWarnings()
+                diffReport.appendChangedFile(ss)
             else:
                 # Retrive latest information about files
                 st = os.stat(fPath)
@@ -283,31 +312,37 @@ def compareFolders(folder, cursor, nrOfWarnings):
                     # File has been modified from db version
 
                 if itemChanged:
-                    nrOfWarnings +=1
-                    print(errorMsg + "\n")
-                    ssChangedFiles += errorMsg + "\n"
+                    ss = errorMsg + "\n"
+                    print(ss)
+                    diffReport.incrementWarnings()
+                    diffReport.appendChangedFile(ss)
 
                 cursor.execute('UPDATE infoFolders SET checked=? WHERE fPath =?',(1,fPath))
         cursor.commit()
 
-    return (nrOfWarnings,ssChangedFiles)
+    return diffReport
 
-def deletedFiles(cursor, nrOfWarnings, ssChangedFiles):
+def deletedFiles(cursor):
+    report = DiffReport()
     cursor = cursor.execute('SELECT * FROM info WHERE checked=?',(0,))
     for row in cursor:
-        nrOfWarnings += 1
-        print("File deleted: {}".format(row[0]))
-        ssChangedFiles += "File deleted: {}\n".format(row[0])
+        ss = "File deleted: {}".format(row[0])
+        print(ss)
+        report.incrementWarnings()
+        report.appendChangedFile(ss)
 
-    return (nrOfWarnings, ssChangedFiles)
+    return report
 
-def deletedFolders(cursor, nrOfWarnings, ssChangedFiles):
+def deletedFolders(cursor):
+    report = DiffReport()
     cursor = cursor.execute('SELECT * FROM infoFolders WHERE checked=?',(0,))
     for row in cursor:
-        nrOfWarnings += 1
-        print("Folder deleted: {}".format(row[0]))
-        ssChangedFiles += "Folder deleted: {}\n".format(row[0])
-    return (nrOfWarnings, ssChangedFiles)
+        ss = "Folder deleted: {}".format(row[0])
+        print(ss)
+        report.incrementWarnings()
+        report.appendChangedFile(ss)
+
+    return report
 
 def reportFileVerification(startTime, monitoreDirectory, pathVerification, reportFile, nrOfDir, nrOfFiles, nrOfWarnings, ssChangedFiles):
     ss = "Monitored directory: " + os.path.abspath(monitoreDirectory) + "\nVerification file: " + os.path.abspath(pathVerification) + "\nReport file: "+ os.path.abspath(reportFile) + "\nNr of directorys: " + str(nrOfDir) + "\nNr of files: " + str(nrOfFiles) + "\nNr of warnings: " + str(nrOfWarnings)
