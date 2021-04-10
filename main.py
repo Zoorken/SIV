@@ -211,6 +211,29 @@ class VerifyArgs():
 class InitMode():
 
     @staticmethod
+    def start(args):
+        print("Initialization mode\n")
+        InitMode.valid(args)
+
+
+        print("Creates new report file and verification file")
+        startTime = time.time()
+        cursor = DB.connect(args.V)
+
+        DB.createTable(cursor)
+        DB.writeHash(cursor, args.H)
+
+        report = InitMode.anlyseFilesToDb(args.D, cursor)
+        InitMode.anlyseFoldersToDb(args.D, cursor) # Get information about all the folders
+        cursor.close() # close db connection
+
+        ss = f"Monitored directory : {args.D}\nVerification file : {args.V}\nNr of directories : {report.dirs}\nNr of files : {report.files}\n"
+        print(ss)
+        writeReportFile(startTime, ss, args.R)
+
+        print("Done with Initialization")
+
+    @staticmethod
     def valid(args):
         if args.H not in ['MD-5', 'SHA-1']:
             print("You must choose a hash function either, -H SHA-1 or MD5")
@@ -254,6 +277,23 @@ class InitMode():
 
 
 class Verification():
+
+    @staticmethod
+    def start(args):
+        print("Verification")
+        Verification.inputValid(args)
+
+
+        startTime = time.time()
+        cursor = DB.connect(args.V)
+
+        report  = Verification.generateReport(cursor, args.D, args.V)
+        writeReportFile(startTime, report, args.R)
+
+        # Cleanup
+        DB.updateInfoCleanup(cursor)
+        print("Verification mode done")
+
 
     @staticmethod
     def inputValid(args):
@@ -446,45 +486,6 @@ def _calcHash(fileName, hashObj):
     return hashObj.hexdigest() # Return the checksum
 
 
-def initializationMode(args):
-    print("Initialization mode\n")
-    InitMode.valid(args)
-
-
-    print("Creates new report file and verification file")
-    startTime = time.time()
-    cursor = DB.connect(args.V)
-
-    DB.createTable(cursor)
-    DB.writeHash(cursor, args.H)
-
-    report = InitMode.anlyseFilesToDb(args.D, cursor)
-    InitMode.anlyseFoldersToDb(args.D, cursor) # Get information about all the folders
-    cursor.close() # close db connection
-
-    ss = f"Monitored directory : {args.D}\nVerification file : {args.V}\nNr of directories : {report.dirs}\nNr of files : {report.files}\n"
-    print(ss)
-    writeReportFile(startTime, ss, args.R)
-
-    print("Done with Initialization")
-
-
-def verificationMode(args):
-    print("Verification mode")
-    Verification.inputValid(args)
-
-
-    startTime = time.time()
-    cursor = DB.connect(args.V)
-
-    report  = Verification.generateReport(cursor, args.D, args.V)
-    writeReportFile(startTime, report, args.R)
-
-    # Cleanup
-    DB.updateInfoCleanup(cursor)
-    print("Verification mode done")
-
-
 def writeReportFile(startTime, ss, fPath):
     with open(fPath, "w") as f:
         f.write(ss + getElapsedTime(startTime))
@@ -512,9 +513,9 @@ def main():
     args = argumentParser()
     VerifyArgs.verifyCommonInputAbortIfInvalid(args)
     if args.i:
-        initializationMode(args)
+        InitMode.start(args)
     elif args.v:
-        verificationMode(args)
+        Verification.start(args)
 
 
 if __name__ == "__main__":
