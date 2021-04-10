@@ -369,25 +369,20 @@ def compareFolders(folder, cursor):
     return diffReport
 
 def deletedFiles(cursor):
-    report = DiffReport()
     cursor = DB.getDeletedFiles(cursor)
-    for row in cursor:
-        ss = "File deleted: {}".format(row[0])
-        print(ss)
-        report.incrementWarnings()
-        report.appendChangedFile(ss)
-
-    return report
+    return _deletedPaths('File', cursor)
 
 def deletedFolders(cursor):
-    report = DiffReport()
     cursor = DB.getDeletedFolders(cursor)
-    for row in cursor:
-        ss = "Folder deleted: {}".format(row[0])
+    return _deletedPaths('Folder', cursor)
+
+def _deletedPaths(mode, rows):
+    report = DiffReport()
+    for row in rows:
+        ss = f"{mode} deleted: {row[0]}"
         print(ss)
         report.incrementWarnings()
         report.appendChangedFile(ss)
-
     return report
 
 def reportFileVerification(startTime, args, reportSS):
