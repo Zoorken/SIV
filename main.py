@@ -207,30 +207,62 @@ class VerifyArgs():
             print("Deleted {}".format(f))
 
 
-def anlyseFilesToDb(folder, cursor):
-    report = DiffReport()
-    for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
-        report.incrementDirs()
-        for name in files:
-            report.incrementFiles()
-            filepath = os.path.join(root, name)
-            cHash = getFileHash(cursor, filepath)
-            DB.writeFileInfo(cursor, FileObj(filepath), cHash)
+class InitMode():
 
-    cursor.commit()
-    return report
+    @staticmethod
+    def valid(args):
+        if args.H not in ['MD-5', 'SHA-1']:
+            print("You must choose a hash function either, -H SHA-1 or MD5")
+            quit()
+
+        if os.path.isfile(args.V) or os.path.isfile(args.R):
+            question = "Should we overwrite verification {} and report {} yes/no : ".format(args.V, args.R)
+            if VerifyArgs.userChoiceYesOrNo(question) == "no":
+                print("The files will be preserved, goodbye")
+                quit()
+            else:
+                VerifyArgs.removeFile(args.V)
+                VerifyArgs.removeFile(args.R)
+
+        VerifyArgs.metadataExistUserDetermineWhatToDo(args.V)
+        VerifyArgs.metadataExistUserDetermineWhatToDo(args.R)
+
+
+    @staticmethod
+    def anlyseFilesToDb(folder, cursor):
+        report = DiffReport()
+        for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
+            report.incrementDirs()
+            for name in files:
+                report.incrementFiles()
+                filepath = os.path.join(root, name)
+                cHash = getFileHash(cursor, filepath)
+                DB.writeFileInfo(cursor, FileObj(filepath), cHash)
+
+        cursor.commit()
+        return report
+
+
+    @staticmethod
+    def anlyseFoldersToDb(folder, cursor):
+        for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
+            for folderName in dirs:
+                folderPath = os.path.join(root, folderName)
+                DB.writeFolderInfo(cursor, FileObj(folderPath))
+        cursor.commit()
+
 
 def getFileHash(cursor, filePath):
     hashType = DB.getHashType(cursor)
     if hashType == "MD-5":
-        return calcHash(filePath, hashlib.md5())
+        return _calcHash(filePath, hashlib.md5())
     elif hashType == "SHA-1":
-        return calcHash(filePath, hashlib.sha1())
+        return _calcHash(filePath, hashlib.sha1())
     else:
         print("ERROR: Unkown hashtype {}".format(hashType))
         quit()
 
-def calcHash(fileName, hashObj):
+def _calcHash(fileName, hashObj):
     blocksize = 65536 # Reads a big chunck each time
     afile = open(fileName, 'rb') # Read file binary
     buf = afile.read(blocksize) # Read the first 65536 bytes
@@ -239,12 +271,6 @@ def calcHash(fileName, hashObj):
         buf = afile.read(blocksize) # Large files needs iterating
     return hashObj.hexdigest() # Return the checksum
 
-def anlyseFoldersToDb(folder, cursor):
-    for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
-        for folderName in dirs:
-            folderPath = os.path.join(root, folderName)
-            DB.writeFolderInfo(cursor, FileObj(folderPath))
-    cursor.commit()
 
 def writeReportFile(startTime, ss, fPath):
     with open(fPath, "w") as f:
@@ -255,7 +281,7 @@ def getElapsedTime(startTime):
 
 def initializationMode(args):
     print("Initialization mode\n")
-    isInitValid(args)
+    InitMode.valid(args)
 
     print("Creates new report file and verification file")
     startTime = time.time()
@@ -264,8 +290,8 @@ def initializationMode(args):
     DB.createTable(cursor)
     DB.writeHash(cursor, args.H)
 
-    report = anlyseFilesToDb(args.D, cursor)
-    anlyseFoldersToDb(args.D, cursor) # Get information about all the folders
+    report = InitMode.anlyseFilesToDb(args.D, cursor)
+    InitMode.anlyseFoldersToDb(args.D, cursor) # Get information about all the folders
     cursor.close() # close db connection
 
     ss = f"Monitored directory : {args.D}\nVerification file : {args.V}\nNr of directories : {report.dirs}\nNr of files : {report.files}\n"
