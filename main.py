@@ -393,8 +393,7 @@ def deletedFolders(cursor):
 def reportFileVerification(startTime, args, reportSS):
     ss = f"Monitored directory: {os.path.abspath(args.D)}\nVerification file: {os.path.abspath(args.V)}\n{reportSS}"
     with open(args.R, 'w') as f:
-        elapsedTime = time.time() - startTime
-        ss += "\nTime to complete in seconds: " + str(int(round(elapsedTime)))
+        ss += "\nTime to complete in seconds :" + calcElapsedTime(startTime) + "\n"
         f.write(ss)
 
 def verifyInitInputIfValid(args):
