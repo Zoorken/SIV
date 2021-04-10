@@ -361,20 +361,13 @@ def compareWithDbFile(filepath, cHash, dbFile):
     fileObj = FileObj(filepath)
     eMsg = ''
 
-    if dbFile[5] != fileObj.lastModify:
-        eMsg += ", prev changes where made {} new changes {}".format(dbFile[5], fileObj.lastModify)
+    eMsg += compareLastModify(dbFile[5], fileObj.lastModify)
+    eMsg += compareUserIdentity(dbFile[2], fileObj.userIdentiy)
+    eMsg += compareGroupIdentify(dbFile[3], fileObj.groupIdentity)
+    eMsg += compareAccessRight(dbFile[4], fileObj.accessRight)
 
     if dbFile[1] != fileObj.getSizeInInt():
         eMsg += ", fileSize from {} to {}".format(dbFile[1], fileObj.getSizeInInt())
-
-    if dbFile[2] != fileObj.userIdentiy:
-        eMsg += ", useridentify from {} to {}".format(dbFile[2], fileObj.userIdentiy)
-
-    if dbFile[3] != fileObj.groupIdentity:
-        eMsg += ", groupidentiy from {} to {}".format(dbFile[3], fileObj.groupIdentity)
-
-    if dbFile[4] != str(fileObj.accessRight):
-        eMsg += ", accessright from {} to {}".format(dbFile[4], fileObj.accessRight)
 
     if dbFile[6] != cHash:
         eMsg += ", file content compromised, hash differ"
@@ -415,22 +408,39 @@ def compareWithDbfolder(filepath, dbFile):
     fileObj = FileObj(filepath)
     eMsg = ''
 
-    if dbFile[1] != fileObj.userIdentiy:
-        eMsg += ", useridentify from {} to {}".format(dbFile[1], fileObj.userIdentiy)
-
-    if dbFile[2] != fileObj.groupIdentity:
-        eMsg += ", groupidentiy from {} to {}".format(dbFile[2], fileObj.groupIdentity)
-
-    if dbFile[3] != str(fileObj.accessRight):
-        eMsg += ", accessright from {} to {}".format(dbFile[3], fileObj.accessRight)
-
-    if dbFile[4] != fileObj.lastModify:
-        eMsg += ", prev changes where made {} new changes {}".format(dbFile[4], fileObj.lastModify)
+    eMsg += compareUserIdentity(dbFile[1], fileObj.userIdentiy)
+    eMsg += compareGroupIdentify(dbFile[2], fileObj.groupIdentity)
+    eMsg += compareAccessRight(dbFile[3], fileObj.accessRight)
+    eMsg += compareLastModify(dbFile[4], fileObj.lastModify)
 
     if eMsg:
         eMsg = "CHANGED: Folder {} ".format(fileObj.path) + eMsg
         print(eMsg + '\n')
     
+    return eMsg
+
+def compareLastModify(dbFModify, fLastModify):
+    eMsg = ''
+    if dbFModify != fLastModify:
+        eMsg = f", prev changes where made {dbFModify} new changes {fLastModify}"
+    return eMsg
+
+def compareAccessRight(dbFAccessRight, fAccessRight):
+    eMsg = ''
+    if dbFAccessRight != str(fAccessRight):
+        eMsg = f", accessright from {dbFAccessRight} to {fAccessRight}"
+    return eMsg
+
+def compareGroupIdentify(dbFGroupIdentity, fGroupIdentity):
+    eMsg = ''
+    if dbFGroupIdentity != fGroupIdentity:
+        eMsg = f", groupidentiy from {dbFGroupIdentity} to {fGroupIdentity}"
+    return eMsg
+
+def compareUserIdentity(dbFUserIdentity, fUserIdentity):
+    eMsg = ''
+    if dbFUserIdentity != fUserIdentity:
+        eMsg = f", useridentify from {dbFUserIdentity} to {fUserIdentity}"
     return eMsg
 
 def deletedFiles(cursor):
