@@ -59,6 +59,9 @@ class DiffReport:
         self.ssChangedFiles += report.ssChangedFiles
         self.warnings += report.warnings
 
+    def getSSReport(self):
+        return f"Nr of directories: {self.dirs}\nNr of files: {self.files}\nNr of warnings: {self.warnings}\n{self.ssChangedFiles}"
+
 def connect_db(filepath):
     print("db filepath: {}".format(filepath))
     return sqlite3.connect(filepath)
@@ -198,7 +201,7 @@ def verificationMode(args):
     report.incrementWithDiffReport(deletedFilesReport)
     report.incrementWithDiffReport(deletedFolderReport)
 
-    reportFileVerification(startTime, args.D, args.V, args.R, report.dirs, report.files, report.warnings, report.ssChangedFiles)
+    reportFileVerification(startTime, args, report.getSSReport())
     # Clean up
     cursor.execute('UPDATE info SET checked=? WHERE checked =?',(0,1)) # Changed it back
     cursor.commit() # Change it back
@@ -344,12 +347,11 @@ def deletedFolders(cursor):
 
     return report
 
-def reportFileVerification(startTime, monitoreDirectory, pathVerification, reportFile, nrOfDir, nrOfFiles, nrOfWarnings, ssChangedFiles):
-    ss = "Monitored directory: " + os.path.abspath(monitoreDirectory) + "\nVerification file: " + os.path.abspath(pathVerification) + "\nReport file: "+ os.path.abspath(reportFile) + "\nNr of directorys: " + str(nrOfDir) + "\nNr of files: " + str(nrOfFiles) + "\nNr of warnings: " + str(nrOfWarnings)
-    with open(reportFile, 'w') as f:
+def reportFileVerification(startTime, args, reportSS):
+    ss = f"Monitored directory: {os.path.abspath(args.D)}\nVerification file: {os.path.abspath(args.V)}\n{reportSS}"
+    with open(args.R, 'w') as f:
         elapsedTime = time.time() - startTime
-        ss += "\nTime to complete in seconds: " + str(int(round(elapsedTime))) + "\n"
-        ss += ssChangedFiles
+        ss += "\nTime to complete in seconds: " + str(int(round(elapsedTime)))
         f.write(ss)
 
 def verifyInitInputIfValid(args):
