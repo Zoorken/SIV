@@ -92,8 +92,8 @@ class DB:
 
 
     @staticmethod
-    def writeFolderInfo(cursor, folderPath, userIdentiy, groupIdentity, acessRight, lastModify):
-        cursor.execute("INSERT INTO infoFolders VALUES(?,?,?,?,?,0)",(folderPath,userIdentiy,groupIdentity,acessRight,lastModify))
+    def writeFolderInfo(cursor, f):
+        cursor.execute("INSERT INTO infoFolders VALUES(?,?,?,?,?,0)",(f.path,f.userIdentiy,f.groupIdentity,f.accessRight,f.lastModify))
 
 
     @staticmethod
@@ -214,9 +214,8 @@ def anlyseFilesToDb(folder, cursor):
         for name in files:
             report.incrementFiles()
             filepath = os.path.join(root, name)
-            fObj = FileObj(filepath)
             cHash = getFileHash(cursor, filepath)
-            DB.writeFileInfo(cursor, fObj, cHash)
+            DB.writeFileInfo(cursor, FileObj(filepath), cHash)
 
     cursor.commit()
     return report
@@ -243,18 +242,9 @@ def calcHash(fileName, hashObj):
 def anlyseFoldersToDb(folder, cursor):
     for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
         for folderName in dirs:
-            folderPath = os.path.join(root,folderName)
-            writeFolderInfoToDb(folderPath, cursor)
+            folderPath = os.path.join(root, folderName)
+            DB.writeFolderInfo(cursor, FileObj(folderPath))
     cursor.commit()
-
-def writeFolderInfoToDb(folderPath, cursor):
-    folderSt = os.stat(folderPath)
-    acessRight = oct(stat.S_IMODE(folderSt.st_mode))
-    userIdentiy = getpwuid(folderSt.st_uid).pw_name
-    groupIdentity = getpwuid(folderSt.st_gid).pw_name
-    lastModify = folderSt.st_mtime
-
-    DB.writeFolderInfo(folderPath, userIdentiy, groupIdentity, acessRight, lastModify)
 
 def writeReportFile(startTime, ss, fPath):
     with open(fPath, "w") as f:
