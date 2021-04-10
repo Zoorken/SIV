@@ -194,16 +194,12 @@ def writeFolderInfoToDb(folderPath, cursor):
 
     DB.writeFolderInfo(folderPath, userIdentiy, groupIdentity, acessRight, lastModify)
 
-def initializationReport(monitoreDirectory, pathVerification, nrOfDir, nrofFiles, startTime, reportFile):
-    ss = "Monitored directory : {}\nVerification file : {}\nNr of directories : {}\n" \
-         "Nr of files : {}\n".format(monitoreDirectory, pathVerification, str(nrOfDir), str(nrofFiles))
+def writeReportFile(startTime, ss, fPath):
+    with open(fPath, "w") as f:
+        f.write(ss + getElapsedTime(startTime))
 
-    with open(reportFile, "w") as f:
-        ss += "Time to complete in seconds :" + calcElapsedTime(startTime) + "\n"
-        f.write(ss)
-
-def calcElapsedTime(startTime):
-    return str(time.time() - startTime)
+def getElapsedTime(startTime):
+    return "Time to complete in seconds :" + str(time.time() - startTime) + "\n"
 
 def initializationMode(args):
     print("Initialization mode\n")
@@ -222,7 +218,9 @@ def initializationMode(args):
     getFolderInfo(args.D, cursor) # Get information about all the folders
     cursor.close() # close db connection
 
-    initializationReport(args.D, args.V, nrOfDirs, nrOfFiles, startTime, args.R)
+    ss = f"Monitored directory : {args.D}\nVerification file : {args.V}\nNr of directories : {nrOfDirs}\nNr of files : {nrOfFiles}\n"
+    writeReportFile(startTime, ss, args.R)
+
     print("Done with Initialization")
 
 
@@ -244,7 +242,9 @@ def verificationMode(args):
 
     report = filesReport + folderReport + deletedFilesReport + deletedFolderReport
 
-    reportFileVerification(startTime, args, report.getSSReport())
+    ss = f"Monitored directory : {args.D}\nVerification file : {args.V}\n{report.getSSReport()}"
+    writeReportFile(startTime, ss, args.R)
+
     # Cleanup
     DB.updateInfoCleanup(cursor)
     print("Verification mode done")
@@ -384,12 +384,6 @@ def _deletedPaths(mode, rows):
         report.incrementWarnings()
         report.appendChangedFile(ss)
     return report
-
-def reportFileVerification(startTime, args, reportSS):
-    ss = f"Monitored directory: {os.path.abspath(args.D)}\nVerification file: {os.path.abspath(args.V)}\n{reportSS}"
-    with open(args.R, 'w') as f:
-        ss += "\nTime to complete in seconds :" + calcElapsedTime(startTime) + "\n"
-        f.write(ss)
 
 def verifyInitInputIfValid(args):
     if args.H not in ['MD-5', 'SHA-1']:
