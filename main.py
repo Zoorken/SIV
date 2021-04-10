@@ -207,20 +207,19 @@ class VerifyArgs():
             print("Deleted {}".format(f))
 
 
-def getFileInfo(folder, cursor):
-    nrOfDirs = 0
-    nrOfFiles = 0
+def anlyseFilesToDb(folder, cursor):
+    report = DiffReport()
     for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
-        nrOfDirs += 1
+        report.incrementDirs()
         for name in files:
-            nrOfFiles += 1
+            report.incrementFiles()
             filepath = os.path.join(root, name)
             fObj = FileObj(filepath)
             cHash = getFileHash(cursor, filepath)
             DB.writeFileInfo(cursor, fObj, cHash)
 
     cursor.commit()
-    return (nrOfDirs, nrOfFiles)
+    return report
 
 def getFileHash(cursor, filePath):
     hashType = DB.getHashType(cursor)
@@ -241,7 +240,7 @@ def calcHash(fileName, hashObj):
         buf = afile.read(blocksize) # Large files needs iterating
     return hashObj.hexdigest() # Return the checksum
 
-def getFolderInfo(folder, cursor):
+def anlyseFoldersToDb(folder, cursor):
     for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
         for folderName in dirs:
             folderPath = os.path.join(root,folderName)
@@ -275,11 +274,12 @@ def initializationMode(args):
     DB.createTable(cursor)
     DB.writeHash(cursor, args.H)
 
-    nrOfDirs, nrOfFiles = getFileInfo(args.D, cursor)
-    getFolderInfo(args.D, cursor) # Get information about all the folders
+    report = anlyseFilesToDb(args.D, cursor)
+    anlyseFoldersToDb(args.D, cursor) # Get information about all the folders
     cursor.close() # close db connection
 
-    ss = f"Monitored directory : {args.D}\nVerification file : {args.V}\nNr of directories : {nrOfDirs}\nNr of files : {nrOfFiles}\n"
+    ss = f"Monitored directory : {args.D}\nVerification file : {args.V}\nNr of directories : {report.dirs}\nNr of files : {report.files}\n"
+    print(ss)
     writeReportFile(startTime, ss, args.R)
 
     print("Done with Initialization")
