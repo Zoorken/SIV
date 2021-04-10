@@ -34,6 +34,7 @@ class FileObj:
     def getSizeInInt(self):
         return int(self.size)
 
+
 class DiffReport:
     def __init__(self):
         self.dirs = 0
@@ -252,6 +253,178 @@ class InitMode():
         cursor.commit()
 
 
+class Verification():
+
+    @staticmethod
+    def inputValid(args):
+        VerifyArgs.abortMissingFile(args.V)
+        VerifyArgs.metadataExistUserDetermineWhatToDo(args.R)
+
+    @staticmethod
+    def generateReport(cursor, dir, verF):
+        filesReport = Compare.files(cursor, dir)
+        folderReport = Compare.folders(cursor, dir)
+        deletedFilesReport = Verification.deletedFiles(cursor)
+        deletedFolderReport = Verification.deletedFolders(cursor)
+
+        report = filesReport + folderReport + deletedFilesReport + deletedFolderReport
+        return f"Monitored directory : {dir}\nVerification file : {verF}\n{report.getSSReport()}"
+
+    @staticmethod
+    def deletedFiles(cursor):
+        cursor = DB.getDeletedFiles(cursor)
+        return Verification._deletedPaths('File', cursor)
+
+
+    @staticmethod
+    def deletedFolders(cursor):
+        cursor = DB.getDeletedFolders(cursor)
+        return Verification._deletedPaths('Folder', cursor)
+
+
+    @staticmethod
+    def _deletedPaths(mode, rows):
+        report = DiffReport()
+        for row in rows:
+            ss = f"{mode} deleted: {row[0]}"
+            print(ss)
+            report.incrementWarnings()
+            report.appendChangedFile(ss)
+        return report
+
+
+class Compare():
+
+    @staticmethod
+    def files(cursor, folder):
+        diffReport = DiffReport()
+        for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
+            diffReport.incrementDirs()
+            for name in files:
+                diffReport.incrementFiles()
+                filepath = os.path.join(root, name)
+                diffReport + Compare._filesAndFolder(cursor, filepath, 'FILE')
+            cursor.commit()
+        return diffReport
+
+
+    @staticmethod
+    def folders(cursor, folder):
+        diffReport = DiffReport()
+        for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
+            for name in dirs:
+                filepath = os.path.join(root, name)
+                diffReport += Compare._filesAndFolder(cursor, filepath, 'FOLDER')
+            cursor.commit()
+
+        return diffReport
+
+
+    @staticmethod
+    def _filesAndFolder(cursor, filepath, mode):
+        if mode == 'FILE':
+            dbFileInfo = DB.getFileInfo(cursor, filepath)
+        elif mode == 'FOLDER':
+            dbFileInfo = DB.getFolderInfo(cursor, filepath)
+        else:
+            print(f"ERROR mode {mode}")
+            quit()
+
+        diffReport = DiffReport()
+        if dbFileInfo is None:
+            ss = f"NEW {mode}: {filepath}"
+            print(ss)
+            diffReport.incrementWarnings()
+            diffReport.appendChangedFile(ss)
+        else:
+            if mode == 'FILE':
+                cHash = getFileHash(cursor, filepath)
+                errorMsg = Compare._withDbFile(filepath, cHash, dbFileInfo)
+            elif mode == 'FOLDER':
+                errorMsg = Compare._withDbFolder(filepath, dbFileInfo)
+
+            if errorMsg:
+                errorMsg += "\n"
+                print(errorMsg)
+                diffReport.incrementWarnings()
+                diffReport.appendChangedFile(errorMsg)
+
+            DB.updateInfoFiles(cursor, filepath)
+
+        return diffReport
+
+
+    @staticmethod
+    def _withDbFile(filepath, cHash, dbFile):
+        fileObj = FileObj(filepath)
+        eMsg = ''
+
+        eMsg += Compare._lastModify(dbFile[5], fileObj.lastModify)
+        eMsg += Compare._userIdentity(dbFile[2], fileObj.userIdentiy)
+        eMsg += Compare._groupIdentity(dbFile[3], fileObj.groupIdentity)
+        eMsg += Compare._accessRight(dbFile[4], fileObj.accessRight)
+
+        if dbFile[1] != fileObj.getSizeInInt():
+            eMsg += ", fileSize from {} to {}".format(dbFile[1], fileObj.getSizeInInt())
+
+        if dbFile[6] != cHash:
+            eMsg += ", file content compromised, hash differ"
+
+        if eMsg:
+            eMsg = "CHANGED: File {} ".format(fileObj.path) + eMsg
+            print(eMsg + "\n")
+
+        return eMsg
+
+    @staticmethod
+    def _withDbFolder(filepath, dbFile):
+        fileObj = FileObj(filepath)
+        eMsg = ''
+
+        eMsg += Compare._userIdentity(dbFile[1], fileObj.userIdentiy)
+        eMsg += Compare._groupIdentity(dbFile[2], fileObj.groupIdentity)
+        eMsg += Compare._accessRight(dbFile[3], fileObj.accessRight)
+        eMsg += Compare._lastModify(dbFile[4], fileObj.lastModify)
+
+        if eMsg:
+            eMsg = "CHANGED: Folder {} ".format(fileObj.path) + eMsg
+            print(eMsg + '\n')
+
+        return eMsg
+
+
+    @staticmethod
+    def _lastModify(dbFModify, fLastModify):
+        eMsg = ''
+        if dbFModify != fLastModify:
+            eMsg = f", prev changes where made {dbFModify} new changes {fLastModify}"
+        return eMsg
+
+
+    @staticmethod
+    def _accessRight(dbFAccessRight, fAccessRight):
+        eMsg = ''
+        if dbFAccessRight != str(fAccessRight):
+            eMsg = f", accessright from {dbFAccessRight} to {fAccessRight}"
+        return eMsg
+
+
+    @staticmethod
+    def _groupIdentity(dbFGroupIdentity, fGroupIdentity):
+        eMsg = ''
+        if dbFGroupIdentity != fGroupIdentity:
+            eMsg = f", groupidentiy from {dbFGroupIdentity} to {fGroupIdentity}"
+        return eMsg
+
+
+    @staticmethod
+    def _userIdentity(dbFUserIdentity, fUserIdentity):
+        eMsg = ''
+        if dbFUserIdentity != fUserIdentity:
+            eMsg = f", useridentify from {dbFUserIdentity} to {fUserIdentity}"
+        return eMsg
+
+
 def getFileHash(cursor, filePath):
     hashType = DB.getHashType(cursor)
     if hashType == "MD-5":
@@ -261,6 +434,7 @@ def getFileHash(cursor, filePath):
     else:
         print("ERROR: Unkown hashtype {}".format(hashType))
         quit()
+
 
 def _calcHash(fileName, hashObj):
     blocksize = 65536 # Reads a big chunck each time
@@ -272,16 +446,10 @@ def _calcHash(fileName, hashObj):
     return hashObj.hexdigest() # Return the checksum
 
 
-def writeReportFile(startTime, ss, fPath):
-    with open(fPath, "w") as f:
-        f.write(ss + getElapsedTime(startTime))
-
-def getElapsedTime(startTime):
-    return "Time to complete in seconds :" + str(time.time() - startTime) + "\n"
-
 def initializationMode(args):
     print("Initialization mode\n")
     InitMode.valid(args)
+
 
     print("Creates new report file and verification file")
     startTime = time.time()
@@ -300,162 +468,30 @@ def initializationMode(args):
 
     print("Done with Initialization")
 
+
 def verificationMode(args):
     print("Verification mode")
-    isVerificationValid(args)
-    ###########
-    # Start verification process
-    # Prepare
-    ##########
+    Verification.inputValid(args)
+
+
     startTime = time.time()
     cursor = DB.connect(args.V)
 
-    filesReport = compareFiles(args.D, cursor)
-    folderReport = compareFolders(args.D, cursor)
-    deletedFilesReport = deletedFiles(cursor)
-    deletedFolderReport = deletedFolders(cursor)
-
-    report = filesReport + folderReport + deletedFilesReport + deletedFolderReport
-    ss = f"Monitored directory : {args.D}\nVerification file : {args.V}\n{report.getSSReport()}"
-    writeReportFile(startTime, ss, args.R)
+    report  = Verification.generateReport(cursor, args.D, args.V)
+    writeReportFile(startTime, report, args.R)
 
     # Cleanup
     DB.updateInfoCleanup(cursor)
     print("Verification mode done")
 
-def isVerificationValid(args):
-    VerifyArgs.abortMissingFile(args.V)
-    VerifyArgs.metadataExistUserDetermineWhatToDo(args.R)
 
-def compareFiles(folder, cursor):
-    diffReport = DiffReport()
-    for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
-        diffReport.incrementDirs()
-        for name in files:
-            diffReport.incrementFiles()
-            filepath = os.path.join(root, name)
-            diffReport + _compare(cursor, filepath, 'FILE')
-        cursor.commit()
-    return diffReport
+def writeReportFile(startTime, ss, fPath):
+    with open(fPath, "w") as f:
+        f.write(ss + getElapsedTime(startTime))
 
-def _compare(cursor, filepath, mode):
-    if mode == 'FILE':
-        dbFileInfo = DB.getFileInfo(cursor, filepath)
-    elif mode == 'FOLDER':
-        dbFileInfo = DB.getFolderInfo(cursor, filepath)
-    else:
-        print(f"ERROR mode {mode}")
-        quit()
 
-    diffReport = DiffReport()
-    if dbFileInfo is None:
-        ss = f"NEW {mode}: {filepath}"
-        print(ss)
-        diffReport.incrementWarnings()
-        diffReport.appendChangedFile(ss)
-    else:
-        if mode == 'FILE':
-            cHash = getFileHash(cursor, filepath)
-            errorMsg = compareWithDbFile(filepath, cHash, dbFileInfo)
-        elif mode == 'FOLDER':
-            errorMsg = compareWithDbfolder(filepath, dbFileInfo)
-
-        if errorMsg:
-            errorMsg += "\n"
-            print(errorMsg)
-            diffReport.incrementWarnings()
-            diffReport.appendChangedFile(errorMsg)
-
-        DB.updateInfoFiles(cursor, filepath)
-
-    return diffReport
-
-def compareWithDbFile(filepath, cHash, dbFile):
-    fileObj = FileObj(filepath)
-    eMsg = ''
-
-    eMsg += compareLastModify(dbFile[5], fileObj.lastModify)
-    eMsg += compareUserIdentity(dbFile[2], fileObj.userIdentiy)
-    eMsg += compareGroupIdentify(dbFile[3], fileObj.groupIdentity)
-    eMsg += compareAccessRight(dbFile[4], fileObj.accessRight)
-
-    if dbFile[1] != fileObj.getSizeInInt():
-        eMsg += ", fileSize from {} to {}".format(dbFile[1], fileObj.getSizeInInt())
-
-    if dbFile[6] != cHash:
-        eMsg += ", file content compromised, hash differ"
-
-    if eMsg:
-        eMsg = "CHANGED: File {} ".format(fileObj.path) + eMsg
-        print(eMsg + "\n")
-
-    return eMsg
-
-def compareFolders(folder, cursor):
-    diffReport = DiffReport()
-    for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
-        for name in dirs:
-            filepath = os.path.join(root, name)
-            diffReport += _compare(cursor, filepath, 'FOLDER')
-        cursor.commit()
-
-    return diffReport
-
-def compareWithDbfolder(filepath, dbFile):
-    fileObj = FileObj(filepath)
-    eMsg = ''
-
-    eMsg += compareUserIdentity(dbFile[1], fileObj.userIdentiy)
-    eMsg += compareGroupIdentify(dbFile[2], fileObj.groupIdentity)
-    eMsg += compareAccessRight(dbFile[3], fileObj.accessRight)
-    eMsg += compareLastModify(dbFile[4], fileObj.lastModify)
-
-    if eMsg:
-        eMsg = "CHANGED: Folder {} ".format(fileObj.path) + eMsg
-        print(eMsg + '\n')
-    
-    return eMsg
-
-def compareLastModify(dbFModify, fLastModify):
-    eMsg = ''
-    if dbFModify != fLastModify:
-        eMsg = f", prev changes where made {dbFModify} new changes {fLastModify}"
-    return eMsg
-
-def compareAccessRight(dbFAccessRight, fAccessRight):
-    eMsg = ''
-    if dbFAccessRight != str(fAccessRight):
-        eMsg = f", accessright from {dbFAccessRight} to {fAccessRight}"
-    return eMsg
-
-def compareGroupIdentify(dbFGroupIdentity, fGroupIdentity):
-    eMsg = ''
-    if dbFGroupIdentity != fGroupIdentity:
-        eMsg = f", groupidentiy from {dbFGroupIdentity} to {fGroupIdentity}"
-    return eMsg
-
-def compareUserIdentity(dbFUserIdentity, fUserIdentity):
-    eMsg = ''
-    if dbFUserIdentity != fUserIdentity:
-        eMsg = f", useridentify from {dbFUserIdentity} to {fUserIdentity}"
-    return eMsg
-
-def deletedFiles(cursor):
-    cursor = DB.getDeletedFiles(cursor)
-    return _deletedPaths('File', cursor)
-
-def deletedFolders(cursor):
-    cursor = DB.getDeletedFolders(cursor)
-    return _deletedPaths('Folder', cursor)
-
-def _deletedPaths(mode, rows):
-    report = DiffReport()
-    for row in rows:
-        ss = f"{mode} deleted: {row[0]}"
-        print(ss)
-        report.incrementWarnings()
-        report.appendChangedFile(ss)
-    return report
+def getElapsedTime(startTime):
+    return "Time to complete in seconds :" + str(time.time() - startTime) + "\n"
 
 
 def argumentParser():
@@ -471,6 +507,7 @@ def argumentParser():
     parser.add_argument("-H", help="Hash function", choices=["SHA-1", "MD-5"])
     return parser.parse_args()
 
+
 def main():
     args = argumentParser()
     VerifyArgs.verifyCommonInputAbortIfInvalid(args)
@@ -478,6 +515,7 @@ def main():
         initializationMode(args)
     elif args.v:
         verificationMode(args)
+
 
 if __name__ == "__main__":
     main()
