@@ -41,6 +41,13 @@ class DiffReport:
         self.ssChangedFiles = ""
         self.warnings = 0
 
+    def __add__(self, other):
+        self.dirs += other.dirs
+        self.files += other.files
+        self.ssChangedFiles += other.ssChangedFiles
+        self.warnings += other.warnings
+        return self
+
     def incrementDirs(self):
         self.dirs += 1
 
@@ -52,12 +59,6 @@ class DiffReport:
 
     def incrementWarnings(self):
         self.warnings += 1
-
-    def incrementWithDiffReport(self, report):
-        self.dirs += report.dirs
-        self.files += report.files
-        self.ssChangedFiles += report.ssChangedFiles
-        self.warnings += report.warnings
 
     def getSSReport(self):
         return f"Nr of directories: {self.dirs}\nNr of files: {self.files}\nNr of warnings: {self.warnings}\n{self.ssChangedFiles}"
@@ -195,11 +196,7 @@ def verificationMode(args):
     deletedFilesReport = deletedFiles(cursor)
     deletedFolderReport = deletedFolders(cursor)
 
-    report = DiffReport()
-    report.incrementWithDiffReport(filesReport)
-    report.incrementWithDiffReport(folderReport)
-    report.incrementWithDiffReport(deletedFilesReport)
-    report.incrementWithDiffReport(deletedFolderReport)
+    report = filesReport + folderReport + deletedFilesReport + deletedFolderReport
 
     reportFileVerification(startTime, args, report.getSSReport())
     # Clean up
