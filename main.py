@@ -36,7 +36,7 @@ class FileObj:
 
 
 def connect_db(filepath):
-    print(filepath)
+    print("db filepath: {}".format(filepath))
     return sqlite3.connect(filepath)
 
 
@@ -53,7 +53,7 @@ def sethashTypeDB(cursor, hashType):
     print("HashMode: {}".format(hashType))
 
 
-def getFileInfo(folder, cursor, hashType):
+def getFileInfo(folder, cursor):
     nrOfDirs = 0
     nrOfFiles = 0
     for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
@@ -62,7 +62,7 @@ def getFileInfo(folder, cursor, hashType):
             nrOfFiles += 1
             filepath = os.path.join(root, name)
             fObj = FileObj(filepath)
-            cHash = getFileHash(hashType, filepath)
+            cHash = getFileHash(cursor, filepath)
             writeFileInfoToDb(fObj, cHash, cursor)
 
     cursor.commit()
@@ -71,7 +71,8 @@ def getFileInfo(folder, cursor, hashType):
 def writeFileInfoToDb(f, cHash, cursor):
     cursor.execute("INSERT INTO info VALUES(?,?,?,?,?,?,?,0)",(f.path,f.size,f.userIdentiy,f.groupIdentity,f.accessRight,f.lastModify,cHash))
 
-def getFileHash(hashType, filePath):
+def getFileHash(cursor, filePath):
+    hashType = getHashTypeDb(cursor)
     if hashType == "MD-5":
         return calcHash(filePath, hashlib.md5())
     elif hashType == "SHA-1":
@@ -79,6 +80,11 @@ def getFileHash(hashType, filePath):
     else:
         print("ERROR: Unkown hashtype {}".format(hashType))
         quit()
+
+def getHashTypeDb(cursor):
+    cursor = cursor.execute('SELECT * FROM config')
+    for row in cursor:
+        return row[0]
 
 def calcHash(fileName, hashObj):
     blocksize = 65536 # Reads a big chunck each time
@@ -116,12 +122,6 @@ def getOldFolderInfo(cursor,filepath):
     for row in cursor:
         return row
 
-def getHashTypeInfo(cursor):
-    cursor = cursor.execute('SELECT * FROM config')
-    for row in cursor:
-        return row[0]
-
-
 def initializationReport(monitoreDirectory, pathVerification, nrOfDir, nrofFiles, startTime, reportFile):
     ss = "Monitored directory : {}\nVerification file : {}\nNr of directories : {}\n" \
          "Nr of files : {}\n".format(monitoreDirectory, pathVerification, str(nrOfDir), str(nrofFiles))
@@ -143,9 +143,9 @@ def initializationMode(args):
     startTime = time.time()
 
     cursor = dbCreateTable(args.V)
-    sethashTypeDB(cursor, args.H) # Now we have stored which type hash is
+    sethashTypeDB(cursor, args.H)
 
-    nrOfDirs, nrOfFiles = getFileInfo(args.D, cursor, args.H)
+    nrOfDirs, nrOfFiles = getFileInfo(args.D, cursor)
     getFolderInfo(args.D, cursor) # Get information about all the folders
     cursor.close() # close db connection
     initializationReport(args.D, args.V, nrOfDirs, nrOfFiles, startTime, args.R)
@@ -162,9 +162,8 @@ def verificationMode(args):
     ##########
     startTime = time.time()
     cursor = connect_db(args.V)
-    hashType = getHashTypeInfo(cursor)
-    print(hashType)
-    nrOfWarnings, nrOfDirs, nrOfFiles, ssChangedFiles = compare(args.D, cursor, hashType)
+
+    nrOfWarnings, nrOfDirs, nrOfFiles, ssChangedFiles = compare(args.D, cursor)
     nrOfWarnings, ssChangedFiles = compareFolders(args.D, cursor, nrOfWarnings)
     nrOfWarnings, ssChangedFiles = deletedFiles(cursor, nrOfWarnings, ssChangedFiles)
     nrOfWarnings, ssChangedFiles = deletedFolders(cursor, nrOfWarnings, ssChangedFiles)
@@ -188,7 +187,7 @@ def metadataExistUserDetermineWhatToDo(f):
         else:
             os.remove(f)
 
-def compare(folder, cursor, hashType):
+def compare(folder, cursor):
     nrOfDirs = 0
     nrOfFiles = 0
     nrOfWarnings = 0
@@ -206,7 +205,7 @@ def compare(folder, cursor, hashType):
                 ssChangedFiles += "NEW FILE: {}\n".format(filepath)
             else:
                 # Retrive latest information about files
-                cHash = getFileHash(hashType, filepath)
+                cHash = getFileHash(cursor, filepath)
                 errorMsg = compareWithDbFile(filepath, cHash, dbFileInfo)
 
                 if errorMsg:
