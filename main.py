@@ -334,7 +334,7 @@ def compareFiles(folder, cursor):
     for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
         diffReport.incrementDirs()
         for name in files:
-            diffReport.incrementFiles
+            diffReport.incrementFiles()
             filepath = os.path.join(root, name)
             dbFileInfo = DB.getFileInfo(cursor, filepath)
 
