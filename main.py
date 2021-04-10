@@ -334,26 +334,39 @@ def compareFiles(folder, cursor):
         for name in files:
             diffReport.incrementFiles()
             filepath = os.path.join(root, name)
-            dbFileInfo = DB.getFileInfo(cursor, filepath)
-
-            if dbFileInfo is None:
-                ss = "NEW FILE: {}".format(filepath)
-                print(ss)
-                diffReport.incrementWarnings()
-                diffReport.appendChangedFile(ss)
-            else:
-                # Retrive latest information about files
-                cHash = getFileHash(cursor, filepath)
-                errorMsg = compareWithDbFile(filepath, cHash, dbFileInfo)
-
-                if errorMsg:
-                    ss += errorMsg + "\n"
-                    print(ss)
-                    diffReport.incrementWarnings()
-                    diffReport.appendChangedFile(ss)
-
-                DB.updateInfoFiles(cursor, filepath)
+            diffReport + _compare(cursor, filepath, 'FILE')
         cursor.commit()
+    return diffReport
+
+def _compare(cursor, filepath, mode):
+    if mode == 'FILE':
+        dbFileInfo = DB.getFileInfo(cursor, filepath)
+    elif mode == 'FOLDER':
+        dbFileInfo = DB.getFolderInfo(cursor, filepath)
+    else:
+        print(f"ERROR mode {mode}")
+        quit()
+
+    diffReport = DiffReport()
+    if dbFileInfo is None:
+        ss = f"NEW {mode}: {filepath}"
+        print(ss)
+        diffReport.incrementWarnings()
+        diffReport.appendChangedFile(ss)
+    else:
+        if mode == 'FILE':
+            cHash = getFileHash(cursor, filepath)
+            errorMsg = compareWithDbFile(filepath, cHash, dbFileInfo)
+        elif mode == 'FOLDER':
+            errorMsg = compareWithDbfolder(filepath, dbFileInfo)
+
+        if errorMsg:
+            errorMsg += "\n"
+            print(errorMsg)
+            diffReport.incrementWarnings()
+            diffReport.appendChangedFile(errorMsg)
+
+        DB.updateInfoFiles(cursor, filepath)
 
     return diffReport
 
@@ -383,23 +396,7 @@ def compareFolders(folder, cursor):
     for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
         for name in dirs:
             filepath = os.path.join(root, name)
-            dbFileInfo = DB.getFolderInfo(cursor, filepath)
-
-            if dbFileInfo == None:
-                ss = "NEW FOLDER: {}".format(filepath)
-                print(ss)
-                diffReport.incrementWarnings()
-                diffReport.appendChangedFile(ss)
-            else:
-                errorMsg = compareWithDbfolder(filepath, dbFileInfo)
-
-                if errorMsg:
-                    ss = errorMsg + "\n"
-                    print(ss)
-                    diffReport.incrementWarnings()
-                    diffReport.appendChangedFile(ss)
-
-                DB.updateInfoFolders(cursor, filepath)
+            diffReport += _compare(cursor, filepath, 'FOLDER')
         cursor.commit()
 
     return diffReport
