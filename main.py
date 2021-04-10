@@ -144,6 +144,69 @@ class DB:
         cursor.commit()
 
 
+class VerifyArgs():
+
+    @staticmethod
+    def verifyCommonInputAbortIfInvalid(args):
+        VerifyArgs._monitoredDirectoryValid(args)
+        VerifyArgs._inputDirNotInMetadataFiles(args.D, args.V, args.R)
+        VerifyArgs._isDir(args.V, '-V')
+        VerifyArgs._isDir(args.R, '-R')
+        print("Verification and report ok")
+
+
+    @staticmethod
+    def _monitoredDirectoryValid(args):
+        if not os.path.isdir(args.D):
+            print("Directory {} is not existing".format(args.D))
+            quit()
+
+
+    @staticmethod
+    def _inputDirNotInMetadataFiles(directory, verification, report):
+        if directory in verification and directory in report:
+            print("Verification: {}\n Report: {} \n can't be inside: " +
+                "directory {}\n please specify outside {}".format(verification, report, directory, directory))
+            quit()
+
+
+    @staticmethod
+    def _isDir(arg, f):
+        if os.path.isdir(f):
+            print("Argument [{}] value is not a file [{}]".format(argument, f))
+            quit()
+
+
+    @staticmethod
+    def userChoiceYesOrNo(question):
+        ans = ""
+        while(ans not in ["yes", "no"]):
+            ans = input(question)
+        return ans
+
+
+    @staticmethod
+    def metadataExistUserDetermineWhatToDo(f):
+        if os.path.isfile(f):
+            q = "Should we overwrite file: {} yes/no : ".format(f)
+            if VerifyArgs.userChoiceYesOrNo(q) == "no":
+                print("We can't continue, try again with different file input")
+                quit()
+            else:
+                os.remove(f)
+
+
+    def abortMissingFile(f):
+        if not os.path.isfile(f):
+            print("ERROR: The file: {} is missing.".format(f))
+            quit()
+
+    def removeFile(f):
+        if os.path.isfile(f):
+            os.remove(f)
+            print("Deleted {}".format(f))
+
+
 def getFileInfo(folder, cursor):
     nrOfDirs = 0
     nrOfFiles = 0
@@ -203,9 +266,7 @@ def getElapsedTime(startTime):
 
 def initializationMode(args):
     print("Initialization mode\n")
-    verifyInitInputIfValid(args)
-    metadataExistUserDetermineWhatToDo(args.V)
-    metadataExistUserDetermineWhatToDo(args.R)
+    isInitValid(args)
 
     print("Creates new report file and verification file")
     startTime = time.time()
@@ -223,12 +284,27 @@ def initializationMode(args):
 
     print("Done with Initialization")
 
+def isInitValid(args):
+    if args.H not in ['MD-5', 'SHA-1']:
+        print("You must choose a hash function either, -H SHA-1 or MD5")
+        quit()
+
+    if os.path.isfile(args.V) or os.path.isfile(args.R):
+        question = "Should we overwrite verification {} and report {} yes/no : ".format(args.V, args.R)
+        if VerifyArgs.userChoiceYesOrNo(question) == "no":
+            print("The files will be preserved, goodbye")
+            quit()
+        else:
+            VerifyArgs.removeFile(args.V)
+            VerifyArgs.removeFile(args.R)
+
+    VerifyArgs.metadataExistUserDetermineWhatToDo(args.V)
+    VerifyArgs.metadataExistUserDetermineWhatToDo(args.R)
 
 
 def verificationMode(args):
     print("Verification mode")
-    abortMissingFile(args.V)
-    metadataExistUserDetermineWhatToDo(args.R)
+    isVerificationValid(args)
     ###########
     # Start verification process
     ##########
@@ -249,19 +325,9 @@ def verificationMode(args):
     DB.updateInfoCleanup(cursor)
     print("Verification mode done")
 
-def abortMissingFile(f):
-    if not os.path.isfile(f):
-        print("ERROR: The file: {} is missing.".format(f))
-        quit()
-
-def metadataExistUserDetermineWhatToDo(f):
-    if os.path.isfile(f):
-        q = "Should we overwrite file: {} yes/no : ".format(f)
-        if userChoiceYesOrNo(q) == "no":
-            print("We can't continue, try again with different file input")
-            quit()
-        else:
-            os.remove(f)
+def isVerificationValid(args):
+    VerifyArgs.abortMissingFile(args.V)
+    VerifyArgs.metadataExistUserDetermineWhatToDo(args.R)
 
 def compare(folder, cursor):
     diffReport = DiffReport()
@@ -385,53 +451,6 @@ def _deletedPaths(mode, rows):
         report.appendChangedFile(ss)
     return report
 
-def verifyInitInputIfValid(args):
-    if args.H not in ['MD-5', 'SHA-1']:
-        print("You must choose a hash function either, -H SHA-1 or MD5")
-        quit()
-
-    if os.path.isfile(args.V) or os.path.isfile(args.R):
-        question = "Should we overwrite verification {} and report {} yes/no : ".format(args.V, args.R)
-        if userChoiceYesOrNo(question) == "no":
-            print("The files will be preserved, goodbye")
-            quit()
-        else:
-            removeFile(args.V)
-            removeFile(args.R)
-
-def userChoiceYesOrNo(question):
-    ans = ""
-    while(ans not in ["yes", "no"]):
-        ans = input(question)
-    return ans
-
-def removeFile(f):
-    if os.path.isfile(f):
-        os.remove(f)
-        print("Deleted {}".format(f))
-
-def verifyCommonInputAbortIfInvalid(args):
-    inputMonitoredDirectoryValid(args)
-    inputDirNotInMetadataFiles(args.D, args.V, args.R)
-    inputIsDir(args.V, '-V')
-    inputIsDir(args.R, '-R')
-    print("Verification and report ok")
-
-def inputMonitoredDirectoryValid(args):
-    if not os.path.isdir(args.D):
-        print("Directory {} is not existing".format(args.D))
-        quit()
-
-def inputDirNotInMetadataFiles(directory, verification, report):
-    if directory in verification and directory in report:
-        print("Verification: {}\n Report: {} \n can't be inside: " +
-              "directory {}\n please specify outside {}".format(verification, report, directory, directory))
-        quit()
-
-def inputIsDir(argument, f):
-    if os.path.isdir(f):
-        print("Argument [{}] value is not a file [{}]".format(argument, f))
-        quit()
 
 def argumentParser():
     parser = argparse.ArgumentParser(description="Use the program in either Initialization or Verification mode:\n" +
@@ -448,7 +467,7 @@ def argumentParser():
 
 def main():
     args = argumentParser()
-    verifyCommonInputAbortIfInvalid(args)
+    VerifyArgs.verifyCommonInputAbortIfInvalid(args)
     if args.i:
         initializationMode(args)
     elif args.v:
