@@ -311,7 +311,7 @@ def verificationMode(args):
     startTime = time.time()
     cursor = DB.connect(args.V)
 
-    filesReport = compare(args.D, cursor)
+    filesReport = compareFiles(args.D, cursor)
     folderReport = compareFolders(args.D, cursor)
     deletedFilesReport = deletedFiles(cursor)
     deletedFolderReport = deletedFolders(cursor)
@@ -329,7 +329,7 @@ def isVerificationValid(args):
     VerifyArgs.abortMissingFile(args.V)
     VerifyArgs.metadataExistUserDetermineWhatToDo(args.R)
 
-def compare(folder, cursor):
+def compareFiles(folder, cursor):
     diffReport = DiffReport()
     for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
         diffReport.incrementDirs()
