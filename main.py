@@ -300,29 +300,12 @@ def initializationMode(args):
 
     print("Done with Initialization")
 
-def isInitValid(args):
-    if args.H not in ['MD-5', 'SHA-1']:
-        print("You must choose a hash function either, -H SHA-1 or MD5")
-        quit()
-
-    if os.path.isfile(args.V) or os.path.isfile(args.R):
-        question = "Should we overwrite verification {} and report {} yes/no : ".format(args.V, args.R)
-        if VerifyArgs.userChoiceYesOrNo(question) == "no":
-            print("The files will be preserved, goodbye")
-            quit()
-        else:
-            VerifyArgs.removeFile(args.V)
-            VerifyArgs.removeFile(args.R)
-
-    VerifyArgs.metadataExistUserDetermineWhatToDo(args.V)
-    VerifyArgs.metadataExistUserDetermineWhatToDo(args.R)
-
-
 def verificationMode(args):
     print("Verification mode")
     isVerificationValid(args)
     ###########
     # Start verification process
+    # Prepare
     ##########
     startTime = time.time()
     cursor = DB.connect(args.V)
@@ -333,7 +316,6 @@ def verificationMode(args):
     deletedFolderReport = deletedFolders(cursor)
 
     report = filesReport + folderReport + deletedFilesReport + deletedFolderReport
-
     ss = f"Monitored directory : {args.D}\nVerification file : {args.V}\n{report.getSSReport()}"
     writeReportFile(startTime, ss, args.R)
 
@@ -365,8 +347,10 @@ def compareFiles(folder, cursor):
                 errorMsg = compareWithDbFile(filepath, cHash, dbFileInfo)
 
                 if errorMsg:
+                    ss += errorMsg + "\n"
+                    print(ss)
                     diffReport.incrementWarnings()
-                    ssChangedFiles += errorMsg + "\n"
+                    diffReport.appendChangedFile(ss)
 
                 DB.updateInfoFiles(cursor, filepath)
         cursor.commit()
@@ -374,29 +358,28 @@ def compareFiles(folder, cursor):
     return diffReport
 
 def compareWithDbFile(filepath, cHash, dbFile):
-    diff = False
     fileObj = FileObj(filepath)
     eMsg = ''
+
     if dbFile[5] != fileObj.lastModify:
-        diff = True
         eMsg += ", prev changes where made {} new changes {}".format(dbFile[5], fileObj.lastModify)
+
     if dbFile[1] != fileObj.getSizeInInt():
-        diff = True
         eMsg += ", fileSize from {} to {}".format(dbFile[1], fileObj.getSizeInInt())
+
     if dbFile[2] != fileObj.userIdentiy:
-        diff = True
         eMsg += ", useridentify from {} to {}".format(dbFile[2], fileObj.userIdentiy)
+
     if dbFile[3] != fileObj.groupIdentity:
-        diff = True
         eMsg += ", groupidentiy from {} to {}".format(dbFile[3], fileObj.groupIdentity)
+
     if dbFile[4] != str(fileObj.accessRight):
-        diff = True
         eMsg += ", accessright from {} to {}".format(dbFile[4], fileObj.accessRight)
+
     if dbFile[6] != cHash:
-        diff = True
         eMsg += ", file content compromised, hash differ"
 
-    if diff:
+    if eMsg:
         eMsg = "CHANGED: File {} ".format(fileObj.path) + eMsg
         print(eMsg + "\n")
 
@@ -406,49 +389,49 @@ def compareFolders(folder, cursor):
     diffReport = DiffReport()
     for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
         for name in dirs:
-            itemChanged = False
-            fPath = os.path.join(root, name)
-            oldInfo = DB.getFolderInfo(cursor, fPath)
+            filepath = os.path.join(root, name)
+            dbFileInfo = DB.getFolderInfo(cursor, filepath)
 
-            if oldInfo == None:
-                ss = "NEW FOLDER: {}".format(fPath)
+            if dbFileInfo == None:
+                ss = "NEW FOLDER: {}".format(filepath)
                 print(ss)
                 diffReport.incrementWarnings()
                 diffReport.appendChangedFile(ss)
             else:
-                # Retrive latest information about files
-                st = os.stat(fPath)
-                acessRight = oct(stat.S_IMODE(st.st_mode)) #wwww.stomp.colorado.edu
-                userIdentiy = getpwuid(st.st_uid).pw_name
-                groupIdentity = getpwuid(st.st_gid).pw_name
-                lastModify = st.st_mtime
+                errorMsg = compareWithDbfolder(filepath, dbFileInfo)
 
-                #Compare the files with the one in db
-                errorMsg = "CHANGED: Folder {} ".format(fPath)
-                if oldInfo[1] != userIdentiy:
-                    itemChanged = True
-                    errorMsg += ", useridentify from {} to {}".format(oldInfo[1], userIdentiy)
-                if oldInfo[2] != groupIdentity:
-                    itemChanged = True
-                    errorMsg += ", groupidentiy from {} to {}".format(oldInfo[2], groupIdentity)
-                if oldInfo[3] != str(acessRight):
-                    itemChanged = True
-                    errorMsg += ", accessright from {} to {}".format(oldInfo[3], acessRight)
-                if oldInfo[4] != lastModify:
-                    itemChanged = True
-                    errorMsg += ", prev changes where made {} new changes {}".format(oldInfo[4], lastModify)
-                    # File has been modified from db version
-
-                if itemChanged:
+                if errorMsg:
                     ss = errorMsg + "\n"
                     print(ss)
                     diffReport.incrementWarnings()
                     diffReport.appendChangedFile(ss)
 
-                DB.updateInfoFolders(cursor, fPath)
+                DB.updateInfoFolders(cursor, filepath)
         cursor.commit()
 
     return diffReport
+
+def compareWithDbfolder(filepath, dbFile):
+    fileObj = FileObj(filepath)
+    eMsg = ''
+
+    if dbFile[1] != fileObj.userIdentiy:
+        eMsg += ", useridentify from {} to {}".format(dbFile[1], fileObj.userIdentiy)
+
+    if dbFile[2] != fileObj.groupIdentity:
+        eMsg += ", groupidentiy from {} to {}".format(dbFile[2], fileObj.groupIdentity)
+
+    if dbFile[3] != str(fileObj.accessRight):
+        eMsg += ", accessright from {} to {}".format(dbFile[3], fileObj.accessRight)
+
+    if dbFile[4] != fileObj.lastModify:
+        eMsg += ", prev changes where made {} new changes {}".format(dbFile[4], fileObj.lastModify)
+
+    if eMsg:
+        eMsg = "CHANGED: Folder {} ".format(fileObj.path) + eMsg
+        print(eMsg + '\n')
+    
+    return eMsg
 
 def deletedFiles(cursor):
     cursor = DB.getDeletedFiles(cursor)
