@@ -229,7 +229,7 @@ class InitMode():
 
         ss = f"Monitored directory : {args.D}\nVerification file : {args.V}\nNr of directories : {report.dirs}\nNr of files : {report.files}\n"
         print(ss)
-        writeReportFile(startTime, ss, args.R)
+        Utils.writeReportFile(startTime, ss, args.R)
 
         print("Done with Initialization")
 
@@ -260,7 +260,7 @@ class InitMode():
             for name in files:
                 report.incrementFiles()
                 filepath = os.path.join(root, name)
-                cHash = getFileHash(cursor, filepath)
+                cHash = Utils.getFileHash(DB.getHashType(cursor), filepath)
                 DB.writeFileInfo(cursor, FileObj(filepath), cHash)
 
         cursor.commit()
@@ -288,7 +288,7 @@ class Verification():
         cursor = DB.connect(args.V)
 
         report  = Verification.generateReport(cursor, args.D, args.V)
-        writeReportFile(startTime, report, args.R)
+        Utils.writeReportFile(startTime, report, args.R)
 
         # Cleanup
         DB.updateInfoCleanup(cursor)
@@ -378,7 +378,7 @@ class Compare():
             diffReport.appendChangedFile(ss)
         else:
             if mode == 'FILE':
-                cHash = getFileHash(cursor, filepath)
+                cHash = Utils.getFileHash(DB.getHashType(cursor), filepath)
                 errorMsg = Compare._withDbFile(filepath, cHash, dbFileInfo)
             elif mode == 'FOLDER':
                 errorMsg = Compare._withDbFolder(filepath, dbFileInfo)
@@ -390,9 +390,7 @@ class Compare():
                 diffReport.appendChangedFile(errorMsg)
 
             DB.updateInfoFiles(cursor, filepath)
-
         return diffReport
-
 
     @staticmethod
     def _withDbFile(filepath, cHash, dbFile):
@@ -462,34 +460,36 @@ class Compare():
         return eMsg
 
 
-def getFileHash(cursor, filePath):
-    hashType = DB.getHashType(cursor)
-    if hashType == "MD-5":
-        return _calcHash(filePath, hashlib.md5())
-    elif hashType == "SHA-1":
-        return _calcHash(filePath, hashlib.sha1())
-    else:
-        print("ERROR: Unkown hashtype {}".format(hashType))
-        quit()
+class Utils:
 
+    @staticmethod
+    def getFileHash(hashType, filePath):
+        if hashType == "MD-5":
+            return Utils._calcHash(filePath, hashlib.md5())
+        elif hashType == "SHA-1":
+            return Utils._calcHash(filePath, hashlib.sha1())
+        else:
+            print(f"ERROR: Unkown hashtype {hashType}")
+            quit()
 
-def _calcHash(fileName, hashObj):
-    blocksize = 65536 # Reads a big chunck each time
-    afile = open(fileName, 'rb') # Read file binary
-    buf = afile.read(blocksize) # Read the first 65536 bytes
-    while len(buf) > 0:
-        hashObj.update(buf) # Att the buf to the function
-        buf = afile.read(blocksize) # Large files needs iterating
-    return hashObj.hexdigest() # Return the checksum
+    @staticmethod
+    def _calcHash(fileName, hashObj):
+        blocksize = 65536 # Reads a big chunck each time
+        afile = open(fileName, 'rb') # Read file binary
+        buf = afile.read(blocksize) # Read the first 65536 bytes
+        while len(buf) > 0:
+            hashObj.update(buf) # Att the buf to the function
+            buf = afile.read(blocksize) # Large files needs iterating
+        return hashObj.hexdigest() # Return the checksum
 
+    @staticmethod
+    def writeReportFile(startTime, ss, fPath):
+        with open(fPath, "w") as f:
+            f.write(ss + Utils.getElapsedTime(startTime))
 
-def writeReportFile(startTime, ss, fPath):
-    with open(fPath, "w") as f:
-        f.write(ss + getElapsedTime(startTime))
-
-
-def getElapsedTime(startTime):
-    return "Time to complete in seconds :" + str(time.time() - startTime) + "\n"
+    @staticmethod
+    def getElapsedTime(startTime):
+        return "Time to complete in seconds :" + str(time.time() - startTime) + "\n"
 
 
 def argumentParser():
