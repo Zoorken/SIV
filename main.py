@@ -172,16 +172,16 @@ class VerifyArgs():
 
 
     @staticmethod
-    def _isDir(arg, f):
+    def _isDir(inputArgument, f):
         if os.path.isdir(f):
-            print("Argument [{}] value is not a file [{}]".format(argument, f))
+            print("Argument [{}] value is not a file [{}]".format(inputArgument, f))
             quit()
 
 
     @staticmethod
     def userChoiceYesOrNo(question):
         ans = ""
-        while(ans not in ["yes", "no"]):
+        while ans not in ["yes", "no"]:
             ans = input(question)
         return ans
 
@@ -412,7 +412,6 @@ class Compare():
 
         if eMsg:
             eMsg = "CHANGED: File {} ".format(fileObj.path) + eMsg
-            print(eMsg + "\n")
 
         return eMsg
 
@@ -428,10 +427,8 @@ class Compare():
 
         if eMsg:
             eMsg = "CHANGED: Folder {} ".format(fileObj.path) + eMsg
-            print(eMsg + '\n')
 
         return eMsg
-
 
     @staticmethod
     def _lastModify(dbFModify, fLastModify):
