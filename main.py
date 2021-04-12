@@ -72,13 +72,11 @@ class DB:
         print("db filepath: {}".format(filepath))
         return sqlite3.connect(filepath)
 
-
     @staticmethod
     def createTable(cursor):
         cursor.execute("CREATE table info (fPath TEXT UNIQUE, fileSize INT, userIdentidy TEXT, groupIdentity Text, acessRight Text, lastModify INT,hashMode Text, checked INT)")
         cursor.execute("CREATE table infoFolders (fPath TEXT UNIQUE, userIdentiy TEXT, groupIdentity TEXT, acessRight TEXT, lastModify INT, checked INT)")
         cursor.execute("CREATE table config (hashMode TEXT)")
-
 
     @staticmethod
     def writeHash(cursor, hashType):
@@ -86,26 +84,21 @@ class DB:
         cursor.commit()
         print("HashMode: {}".format(hashType))
 
-
     @staticmethod
     def writeFileInfo(cursor, f, cHash):
         cursor.execute("INSERT INTO info VALUES(?,?,?,?,?,?,?,0)",(f.path,f.size,f.userIdentiy,f.groupIdentity,f.accessRight,f.lastModify,cHash))
-
 
     @staticmethod
     def writeFolderInfo(cursor, f):
         cursor.execute("INSERT INTO infoFolders VALUES(?,?,?,?,?,0)",(f.path,f.userIdentiy,f.groupIdentity,f.accessRight,f.lastModify))
 
-
     @staticmethod
     def updateInfoFolders(cursor, fPath):
         cursor.execute('UPDATE infoFolders SET checked=? WHERE fPath =?',(1,fPath))
 
-
     @staticmethod
     def updateInfoFiles(cursor, fPath):
         cursor.execute('UPDATE info SET checked=? WHERE fPath =?',(1,fPath))
-
 
     @staticmethod
     def getHashType(cursor):
@@ -113,13 +106,11 @@ class DB:
         for row in cursor:
             return row[0]
 
-
     @staticmethod
     def getFileInfo(cursor, filepath):
         cursor = cursor.execute('SELECT * FROM info WHERE fPath=?',(filepath,))
         for row in cursor:
             return row
-
 
     @staticmethod
     def getFolderInfo(cursor, filepath):
@@ -127,16 +118,13 @@ class DB:
         for row in cursor:
             return row
 
-
     @staticmethod
     def getDeletedFiles(cursor):
         return cursor.execute('SELECT * FROM info WHERE checked=?',(0,))
 
-
     @staticmethod
     def getDeletedFolders(cursor):
         return cursor.execute('SELECT * FROM infoFolders WHERE checked=?',(0,))
-
 
     @staticmethod
     def updateInfoCleanup(cursor):
@@ -145,7 +133,7 @@ class DB:
         cursor.commit()
 
 
-class VerifyArgs():
+class VerifyArgs:
 
     @staticmethod
     def verifyCommonInputAbortIfInvalid(args):
@@ -155,13 +143,11 @@ class VerifyArgs():
         VerifyArgs._isDir(args.R, '-R')
         print("Verification and report ok")
 
-
     @staticmethod
     def _monitoredDirectoryValid(args):
         if not os.path.isdir(args.D):
             print("Directory {} is not existing".format(args.D))
             quit()
-
 
     @staticmethod
     def _inputDirNotInMetadataFiles(directory, verification, report):
@@ -170,13 +156,11 @@ class VerifyArgs():
                 "directory {}\n please specify outside {}".format(verification, report, directory, directory))
             quit()
 
-
     @staticmethod
     def _isDir(inputArgument, f):
         if os.path.isdir(f):
             print("Argument [{}] value is not a file [{}]".format(inputArgument, f))
             quit()
-
 
     @staticmethod
     def userChoiceYesOrNo(question):
@@ -184,7 +168,6 @@ class VerifyArgs():
         while ans not in ["yes", "no"]:
             ans = input(question)
         return ans
-
 
     @staticmethod
     def metadataExistUserDetermineWhatToDo(f):
@@ -195,7 +178,6 @@ class VerifyArgs():
                 quit()
             else:
                 os.remove(f)
-
 
     def abortMissingFile(f):
         if not os.path.isfile(f):
@@ -208,7 +190,7 @@ class VerifyArgs():
             print("Deleted {}".format(f))
 
 
-class InitMode():
+class InitMode:
 
     @staticmethod
     def start(args):
@@ -251,7 +233,6 @@ class InitMode():
         VerifyArgs.metadataExistUserDetermineWhatToDo(args.V)
         VerifyArgs.metadataExistUserDetermineWhatToDo(args.R)
 
-
     @staticmethod
     def anlyseFilesToDb(folder, cursor):
         report = DiffReport()
@@ -266,7 +247,6 @@ class InitMode():
         cursor.commit()
         return report
 
-
     @staticmethod
     def anlyseFoldersToDb(folder, cursor):
         for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
@@ -276,7 +256,7 @@ class InitMode():
         cursor.commit()
 
 
-class Verification():
+class Verification:
 
     @staticmethod
     def start(args):
@@ -293,7 +273,6 @@ class Verification():
         # Cleanup
         DB.updateInfoCleanup(cursor)
         print("Verification mode done")
-
 
     @staticmethod
     def inputValid(args):
@@ -315,12 +294,10 @@ class Verification():
         cursor = DB.getDeletedFiles(cursor)
         return Verification._deletedPaths('File', cursor)
 
-
     @staticmethod
     def deletedFolders(cursor):
         cursor = DB.getDeletedFolders(cursor)
         return Verification._deletedPaths('Folder', cursor)
-
 
     @staticmethod
     def _deletedPaths(mode, rows):
@@ -333,7 +310,7 @@ class Verification():
         return report
 
 
-class Compare():
+class Compare:
 
     @staticmethod
     def files(cursor, folder):
@@ -347,7 +324,6 @@ class Compare():
             cursor.commit()
         return diffReport
 
-
     @staticmethod
     def folders(cursor, folder):
         diffReport = DiffReport()
@@ -358,7 +334,6 @@ class Compare():
             cursor.commit()
 
         return diffReport
-
 
     @staticmethod
     def _filesAndFolder(cursor, filepath, mode):
@@ -435,7 +410,6 @@ class Compare():
             eMsg = f", prev changes where made {dbFModify} new changes {fLastModify}"
         return eMsg
 
-
     @staticmethod
     def _accessRight(dbFAccessRight, fAccessRight):
         eMsg = ''
@@ -443,14 +417,12 @@ class Compare():
             eMsg = f", accessright from {dbFAccessRight} to {fAccessRight}"
         return eMsg
 
-
     @staticmethod
     def _groupIdentity(dbFGroupIdentity, fGroupIdentity):
         eMsg = ''
         if dbFGroupIdentity != fGroupIdentity:
             eMsg = f", groupidentiy from {dbFGroupIdentity} to {fGroupIdentity}"
         return eMsg
-
 
     @staticmethod
     def _userIdentity(dbFUserIdentity, fUserIdentity):
