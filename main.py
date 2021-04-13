@@ -379,15 +379,9 @@ class Compare:
 
     @staticmethod
     def _filesAndFolder(cursor, filepath, mode):
-        if mode == 'FILE':
-            dbFileObj = DB.getFileInfo(cursor, filepath)
-        elif mode == 'FOLDER':
-            dbFileObj = DB.getFolderInfo(cursor, filepath)
-        else:
-            print(f"ERROR mode {mode}")
-            quit()
-
         diffReport = DiffReport()
+        dbFileObj = Compare._getDBFileinfoObj(cursor, filepath, mode)
+
         if dbFileObj is None:
             ss = f"NEW {mode}: {filepath}"
             print(ss)
@@ -395,14 +389,16 @@ class Compare:
             diffReport.appendChangedFile(ss)
         else:
             print(f"This is from db {dbFileObj.accessRight} {mode}")
+            fileObj = FileObj().initFromFilepath(filepath)
+
             if mode == 'FILE':
                 cHash = Utils.getFileHash(DB.getHashType(cursor), filepath)
-                errorMsg = Compare._withDbFile(filepath, cHash, dbFileObj)
+                errorMsg = Compare._fileProperties(fileObj.setChash(cHash), dbFileObj)
             elif mode == 'FOLDER':
-                errorMsg = Compare._withDbFolder(filepath, dbFileObj)
+                errorMsg = Compare._fileProperties(fileObj, dbFileObj)
 
             if errorMsg:
-                errorMsg += "\n"
+                errorMsg = f"CHANGED: {mode} {filepath} {errorMsg}\n"
                 print(errorMsg)
                 diffReport.incrementWarnings()
                 diffReport.appendChangedFile(errorMsg)
@@ -411,41 +407,23 @@ class Compare:
         return diffReport
 
     @staticmethod
-    def _withDbFile(filepath, cHash, dbObj):
-        fileObj = FileObj().initFromFilepath(filepath).setChash(cHash)
-        eMsg = ''
-
-        eMsg += Compare._userIdentity(dbObj.userIdentiy, fileObj.userIdentiy)
-        eMsg += Compare._groupIdentity(dbObj.groupIdentity, fileObj.groupIdentity)
-        eMsg += Compare._accessRight(dbObj.accessRight, fileObj.accessRight)
-        eMsg += Compare._lastModify(dbObj.lastModify, fileObj.lastModify)
-
-        if dbObj.getSizeInInt() != fileObj.getSizeInInt():
-            eMsg += ", fileSize from {} to {}".format(dbObj.getSizeInInt(),
-                                                      fileObj.getSizeInInt())
-
-        if dbObj.cHash != fileObj.cHash:
-            Utils.loggPrinter(f"dbHash: {dbObj.cHash}. fHash {fileObj.cHash}\n")
-            eMsg += ", file content compromised, hash differ"
-
-        if eMsg:
-            eMsg = "CHANGED: File {} ".format(fileObj.path) + eMsg
-
-        return eMsg
+    def _getDBFileinfoObj(cursor, filepath, mode):
+        if mode == 'FILE':
+            return DB.getFileInfo(cursor, filepath)
+        elif mode == 'FOLDER':
+            return DB.getFolderInfo(cursor, filepath)
+        else:
+            print(f"ERROR mode {mode}")
+            quit()
 
     @staticmethod
-    def _withDbFolder(filepath, dbObj):
-        fileObj = FileObj().initFromFilepath(filepath)
-        eMsg = ''
-
-        eMsg += Compare._userIdentity(dbObj.userIdentiy, fileObj.userIdentiy)
+    def _fileProperties(fileObj, dbObj):
+        eMsg = Compare._userIdentity(dbObj.userIdentiy, fileObj.userIdentiy)
         eMsg += Compare._groupIdentity(dbObj.groupIdentity, fileObj.groupIdentity)
         eMsg += Compare._accessRight(dbObj.accessRight, fileObj.accessRight)
         eMsg += Compare._lastModify(dbObj.lastModify, fileObj.lastModify)
-
-        if eMsg:
-            eMsg = "CHANGED: Folder {} ".format(fileObj.path) + eMsg
-
+        eMsg += Compare._sizeInt(dbObj.getSizeInInt(), fileObj.getSizeInInt())
+        eMsg += Compare._hash(dbObj.cHash, fileObj.cHash)
         return eMsg
 
     @staticmethod
@@ -474,6 +452,21 @@ class Compare:
         eMsg = ''
         if dbFUserIdentity != fUserIdentity:
             eMsg = f", useridentify from {dbFUserIdentity} to {fUserIdentity}"
+        return eMsg
+
+    @staticmethod
+    def _sizeInt(dbFSize, fSize):
+        eMsg = ''
+        if dbFSize != fSize:
+            eMsg += f", fileSize from {dbFSize} to {fSize}"
+        return eMsg
+
+    @staticmethod
+    def _hash(dbFHash, fHash):
+        eMsg = ''
+        if dbFHash != fHash:
+            Utils.loggPrinter(f"dbHash: {dbFHash}. fHash {fHash}\n")
+            eMsg += ", file content compromised, hash differ"
         return eMsg
 
 
