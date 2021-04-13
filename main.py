@@ -74,7 +74,7 @@ class DB:
 
     @staticmethod
     def createTable(cursor):
-        cursor.execute("CREATE table info (fPath TEXT UNIQUE, fileSize INT, userIdentidy TEXT, groupIdentity Text, acessRight Text, lastModify INT,hashMode Text, checked INT)")
+        cursor.execute("CREATE table info (fPath TEXT UNIQUE, userIdentidy TEXT, groupIdentity Text, acessRight Text, lastModify INT,fileSize INT,hash Text, checked INT)")
         cursor.execute("CREATE table infoFolders (fPath TEXT UNIQUE, userIdentiy TEXT, groupIdentity TEXT, acessRight TEXT, lastModify INT, checked INT)")
         cursor.execute("CREATE table config (hashMode TEXT)")
 
@@ -86,7 +86,7 @@ class DB:
 
     @staticmethod
     def writeFileInfo(cursor, f, cHash):
-        cursor.execute("INSERT INTO info VALUES(?,?,?,?,?,?,?,0)",(f.path,f.size,f.userIdentiy,f.groupIdentity,f.accessRight,f.lastModify,cHash))
+        cursor.execute("INSERT INTO info VALUES(?,?,?,?,?,?,?,0)",(f.path,f.userIdentiy,f.groupIdentity,f.accessRight,f.lastModify,f.size,cHash))
 
     @staticmethod
     def writeFolderInfo(cursor, f):
@@ -372,12 +372,12 @@ class Compare:
         fileObj = FileObj(filepath)
         eMsg = ''
 
-        eMsg += Compare._lastModify(dbFile[5], fileObj.lastModify)
-        eMsg += Compare._userIdentity(dbFile[2], fileObj.userIdentiy)
-        eMsg += Compare._groupIdentity(dbFile[3], fileObj.groupIdentity)
-        eMsg += Compare._accessRight(dbFile[4], fileObj.accessRight)
+        eMsg += Compare._userIdentity(dbFile[1], fileObj.userIdentiy)
+        eMsg += Compare._groupIdentity(dbFile[2], fileObj.groupIdentity)
+        eMsg += Compare._accessRight(dbFile[3], fileObj.accessRight)
+        eMsg += Compare._lastModify(dbFile[4], fileObj.lastModify)
 
-        if dbFile[1] != fileObj.getSizeInInt():
+        if dbFile[5] != fileObj.getSizeInInt():
             eMsg += ", fileSize from {} to {}".format(dbFile[1], fileObj.getSizeInInt())
 
         if dbFile[6] != cHash:
