@@ -4,7 +4,28 @@ from pwd import getpwuid
 
 
 class FileObj:
-    def __init__(self, path):
+    def __init__(self):
+        self.path = None
+        self.st = None
+        self.accessRight = None
+        self.size = None
+        self.userIdentiy = None
+        self.groupIdentity = None
+        self.lastModify = None
+        self.cHash = ""
+
+    def initFromDB(self, db):
+        self.path = db[0]
+        self.userIdentiy = db[1]
+        self.groupIdentity = db[2]
+        self.accessRight = db[3]
+        self.lastModify = db[4]
+        self.size = db[5]
+        if len(db) > 7:
+            self.cHash = db[6]
+        return self
+
+    def initFromFilepath(self, path):
         self.path = path
         self.st = self.setOsStat()
         self.accessRight = self.setAccessRight()
@@ -12,6 +33,7 @@ class FileObj:
         self.userIdentiy = self.setUserIdentiy()
         self.groupIdentity = self.setGroupIdentity()
         self.lastModify = self.setLastModify()
+        return self
 
     def setOsStat(self):
         return os.stat(self.path)
@@ -30,6 +52,10 @@ class FileObj:
 
     def setLastModify(self):
         return self.st.st_mtime
+
+    def setChash(self, cHash):
+        self.cHash = cHash
+        return self
 
     def getSizeInInt(self):
         return int(self.size)
@@ -85,8 +111,8 @@ class DB:
         print("HashMode: {}".format(hashType))
 
     @staticmethod
-    def writeFileInfo(cursor, f, cHash):
-        cursor.execute("INSERT INTO info VALUES(?,?,?,?,?,?,?,0)",(f.path,f.userIdentiy,f.groupIdentity,f.accessRight,f.lastModify,f.size,cHash))
+    def writeFileInfo(cursor, f):
+        cursor.execute("INSERT INTO info VALUES(?,?,?,?,?,?,?,0)",(f.path,f.userIdentiy,f.groupIdentity,f.accessRight,f.lastModify,f.size,f.cHash))
 
     @staticmethod
     def writeFolderInfo(cursor, f):
@@ -108,12 +134,28 @@ class DB:
 
     @staticmethod
     def getFileInfo(cursor, filepath):
+        row = DB._getFileInfo(cursor, filepath)
+        if row:
+            Utils.loggPrinter(f"DB file row {row}")
+            return FileObj().initFromDB(row)
+        return row
+
+    @staticmethod
+    def _getFileInfo(cursor, filepath):
         cursor = cursor.execute('SELECT * FROM info WHERE fPath=?',(filepath,))
         for row in cursor:
             return row
 
     @staticmethod
     def getFolderInfo(cursor, filepath):
+        row = DB._getFolderInfo(cursor, filepath)
+        if row:
+            Utils.loggPrinter(f"DB folder row {row}")
+            return FileObj().initFromDB(row)
+        return row
+
+    @staticmethod
+    def _getFolderInfo(cursor, filepath):
         cursor = cursor.execute('SELECT * FROM infoFolders WHERE fPath=?',(filepath,))
         for row in cursor:
             return row
@@ -242,7 +284,7 @@ class InitMode:
                 report.incrementFiles()
                 filepath = os.path.join(root, name)
                 cHash = Utils.getFileHash(DB.getHashType(cursor), filepath)
-                DB.writeFileInfo(cursor, FileObj(filepath), cHash)
+                DB.writeFileInfo(cursor, FileObj().initFromFilepath(filepath).setChash(cHash))
 
         cursor.commit()
         return report
@@ -252,7 +294,7 @@ class InitMode:
         for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
             for folderName in dirs:
                 folderPath = os.path.join(root, folderName)
-                DB.writeFolderInfo(cursor, FileObj(folderPath))
+                DB.writeFolderInfo(cursor, FileObj().initFromFilepath(folderPath))
         cursor.commit()
 
 
@@ -338,25 +380,26 @@ class Compare:
     @staticmethod
     def _filesAndFolder(cursor, filepath, mode):
         if mode == 'FILE':
-            dbFileInfo = DB.getFileInfo(cursor, filepath)
+            dbFileObj = DB.getFileInfo(cursor, filepath)
         elif mode == 'FOLDER':
-            dbFileInfo = DB.getFolderInfo(cursor, filepath)
+            dbFileObj = DB.getFolderInfo(cursor, filepath)
         else:
             print(f"ERROR mode {mode}")
             quit()
 
         diffReport = DiffReport()
-        if dbFileInfo is None:
+        if dbFileObj is None:
             ss = f"NEW {mode}: {filepath}"
             print(ss)
             diffReport.incrementWarnings()
             diffReport.appendChangedFile(ss)
         else:
+            print(f"This is from db {dbFileObj.accessRight} {mode}")
             if mode == 'FILE':
                 cHash = Utils.getFileHash(DB.getHashType(cursor), filepath)
-                errorMsg = Compare._withDbFile(filepath, cHash, dbFileInfo)
+                errorMsg = Compare._withDbFile(filepath, cHash, dbFileObj)
             elif mode == 'FOLDER':
-                errorMsg = Compare._withDbFolder(filepath, dbFileInfo)
+                errorMsg = Compare._withDbFolder(filepath, dbFileObj)
 
             if errorMsg:
                 errorMsg += "\n"
@@ -368,19 +411,21 @@ class Compare:
         return diffReport
 
     @staticmethod
-    def _withDbFile(filepath, cHash, dbFile):
-        fileObj = FileObj(filepath)
+    def _withDbFile(filepath, cHash, dbObj):
+        fileObj = FileObj().initFromFilepath(filepath).setChash(cHash)
         eMsg = ''
 
-        eMsg += Compare._userIdentity(dbFile[1], fileObj.userIdentiy)
-        eMsg += Compare._groupIdentity(dbFile[2], fileObj.groupIdentity)
-        eMsg += Compare._accessRight(dbFile[3], fileObj.accessRight)
-        eMsg += Compare._lastModify(dbFile[4], fileObj.lastModify)
+        eMsg += Compare._userIdentity(dbObj.userIdentiy, fileObj.userIdentiy)
+        eMsg += Compare._groupIdentity(dbObj.groupIdentity, fileObj.groupIdentity)
+        eMsg += Compare._accessRight(dbObj.accessRight, fileObj.accessRight)
+        eMsg += Compare._lastModify(dbObj.lastModify, fileObj.lastModify)
 
-        if dbFile[5] != fileObj.getSizeInInt():
-            eMsg += ", fileSize from {} to {}".format(dbFile[1], fileObj.getSizeInInt())
+        if dbObj.getSizeInInt() != fileObj.getSizeInInt():
+            eMsg += ", fileSize from {} to {}".format(dbObj.getSizeInInt(),
+                                                      fileObj.getSizeInInt())
 
-        if dbFile[6] != cHash:
+        if dbObj.cHash != fileObj.cHash:
+            Utils.loggPrinter(f"dbHash: {dbObj.cHash}. fHash {fileObj.cHash}\n")
             eMsg += ", file content compromised, hash differ"
 
         if eMsg:
@@ -389,14 +434,14 @@ class Compare:
         return eMsg
 
     @staticmethod
-    def _withDbFolder(filepath, dbFile):
-        fileObj = FileObj(filepath)
+    def _withDbFolder(filepath, dbObj):
+        fileObj = FileObj().initFromFilepath(filepath)
         eMsg = ''
 
-        eMsg += Compare._userIdentity(dbFile[1], fileObj.userIdentiy)
-        eMsg += Compare._groupIdentity(dbFile[2], fileObj.groupIdentity)
-        eMsg += Compare._accessRight(dbFile[3], fileObj.accessRight)
-        eMsg += Compare._lastModify(dbFile[4], fileObj.lastModify)
+        eMsg += Compare._userIdentity(dbObj.userIdentiy, fileObj.userIdentiy)
+        eMsg += Compare._groupIdentity(dbObj.groupIdentity, fileObj.groupIdentity)
+        eMsg += Compare._accessRight(dbObj.accessRight, fileObj.accessRight)
+        eMsg += Compare._lastModify(dbObj.lastModify, fileObj.lastModify)
 
         if eMsg:
             eMsg = "CHANGED: Folder {} ".format(fileObj.path) + eMsg
@@ -462,6 +507,11 @@ class Utils:
     @staticmethod
     def getElapsedTime(startTime):
         return "Time to complete in seconds :" + str(time.time() - startTime) + "\n"
+
+    @staticmethod
+    def loggPrinter(ss):
+        return ""
+        #print(ss)
 
 
 def argumentParser():
