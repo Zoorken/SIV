@@ -356,37 +356,33 @@ class Compare:
 
     @staticmethod
     def files(cursor, folder):
-        diffReport = DiffReport()
-        for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
-            diffReport.incrementDirs()
-            for name in files:
-                diffReport.incrementFiles()
-                filepath = os.path.join(root, name)
-                diffReport + Compare._filesAndFolder(cursor, filepath, 'FILE')
-            cursor.commit()
-        return diffReport
+        report = DiffReport()
+        for file in Utils.getFilePaths(folder):
+            report.incrementFiles()
+            report + Compare._filesAndFolder(cursor, file, 'FILE')
+        cursor.commit()
+        return report
 
     @staticmethod
     def folders(cursor, folder):
-        diffReport = DiffReport()
-        for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
-            for name in dirs:
-                filepath = os.path.join(root, name)
-                diffReport += Compare._filesAndFolder(cursor, filepath, 'FOLDER')
-            cursor.commit()
+        report = DiffReport()
+        for folder in Utils.getFolderPaths(folder):
+            report.incrementDirs()
+            report += Compare._filesAndFolder(cursor, folder, 'FOLDER')
+        cursor.commit()
 
-        return diffReport
+        return report
 
     @staticmethod
     def _filesAndFolder(cursor, filepath, mode):
-        diffReport = DiffReport()
+        report = DiffReport()
         dbFileObj = Compare._getDBFileinfoObj(cursor, filepath, mode)
 
         if dbFileObj is None:
             ss = f"NEW {mode}: {filepath}"
             print(ss)
-            diffReport.incrementWarnings()
-            diffReport.appendChangedFile(ss)
+            report.incrementWarnings()
+            report.appendChangedFile(ss)
         else:
             print(f"This is from db {dbFileObj.accessRight} {mode}")
             fileObj = FileObj().initFromFilepath(filepath)
@@ -400,11 +396,11 @@ class Compare:
             if errorMsg:
                 errorMsg = f"CHANGED: {mode} {filepath} {errorMsg}\n"
                 print(errorMsg)
-                diffReport.incrementWarnings()
-                diffReport.appendChangedFile(errorMsg)
+                report.incrementWarnings()
+                report.appendChangedFile(errorMsg)
 
             DB.updateInfoFiles(cursor, filepath)
-        return diffReport
+        return report
 
     @staticmethod
     def _getDBFileinfoObj(cursor, filepath, mode):
@@ -505,6 +501,24 @@ class Utils:
     def loggPrinter(ss):
         return ""
         #print(ss)
+
+    @staticmethod
+    def getFilePaths(folder):
+        filesPaths = []
+        for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
+            for name in files:
+                filesPaths.append(os.path.join(root, name))
+
+        return filesPaths
+
+    @staticmethod
+    def getFolderPaths(folder):
+        filesPaths = []
+        for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
+            for name in dirs:
+                filesPaths.append(os.path.join(root, name))
+
+        return filesPaths
 
 
 def argumentParser():
