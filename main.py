@@ -104,30 +104,32 @@ class DB:
     @staticmethod
     def createTable(cursor):
         cursor.execute("CREATE table info (fPath TEXT UNIQUE, userIdentidy TEXT, groupIdentity Text, acessRight Text, lastModify INT,fileSize INT,hash Text, checked INT)")
-        cursor.execute("CREATE table infoFolders (fPath TEXT UNIQUE, userIdentiy TEXT, groupIdentity TEXT, acessRight TEXT, lastModify INT, checked INT)")
+        cursor.execute("CREATE table infoFolders (fPath TEXT UNIQUE, userIdentiy TEXT, groupIdentity TEXT, acessRight TEXT, lastModify INT, fileSize INT, checked INT)")
         cursor.execute("CREATE table config (hashMode TEXT)")
 
     @staticmethod
     def writeHash(cursor, hashType):
-        cursor.execute("INSERT INTO config VALUES(?)",(hashType,))
+        cursor.execute("INSERT INTO config VALUES(?)", (hashType,))
         cursor.commit()
         print("HashMode: {}".format(hashType))
 
     @staticmethod
     def writeFileInfo(cursor, f):
-        cursor.execute("INSERT INTO info VALUES(?,?,?,?,?,?,?,0)",(f.path,f.userIdentiy,f.groupIdentity,f.accessRight,f.lastModify,f.size,f.cHash))
+        cursor.execute("INSERT INTO info VALUES(?,?,?,?,?,?,?,0)", (f.path, f.userIdentiy, f.groupIdentity,
+                                                                    f.accessRight, f.lastModify, f.size, f.cHash))
 
     @staticmethod
     def writeFolderInfo(cursor, f):
-        cursor.execute("INSERT INTO infoFolders VALUES(?,?,?,?,?,0)",(f.path,f.userIdentiy,f.groupIdentity,f.accessRight,f.lastModify))
+        cursor.execute("INSERT INTO infoFolders VALUES(?,?,?,?,?,?,0)", (f.path, f.userIdentiy, f.groupIdentity,
+                                                                       f.accessRight, f.lastModify, f.size))
 
     @staticmethod
-    def updateInfoFolders(cursor, fPath):
-        cursor.execute('UPDATE infoFolders SET checked=? WHERE fPath =?',(1,fPath))
+    def folderExists(cursor, fPath):
+        cursor.execute('UPDATE infoFolders SET checked=? WHERE fPath =?', (1, fPath))
 
     @staticmethod
-    def updateInfoFiles(cursor, fPath):
-        cursor.execute('UPDATE info SET checked=? WHERE fPath =?',(1,fPath))
+    def fileExists(cursor, fPath):
+        cursor.execute('UPDATE info SET checked=? WHERE fPath =?', (1, fPath))
 
     @staticmethod
     def getHashType(cursor):
@@ -145,7 +147,7 @@ class DB:
 
     @staticmethod
     def _getFileInfo(cursor, filepath):
-        cursor = cursor.execute('SELECT * FROM info WHERE fPath=?',(filepath,))
+        cursor = cursor.execute('SELECT * FROM info WHERE fPath=?', (filepath,))
         for row in cursor:
             return row
 
@@ -159,22 +161,38 @@ class DB:
 
     @staticmethod
     def _getFolderInfo(cursor, filepath):
-        cursor = cursor.execute('SELECT * FROM infoFolders WHERE fPath=?',(filepath,))
+        cursor = cursor.execute('SELECT * FROM infoFolders WHERE fPath=?', (filepath,))
         for row in cursor:
             return row
 
     @staticmethod
     def getDeletedFiles(cursor):
-        return cursor.execute('SELECT * FROM info WHERE checked=?',(0,))
+        return cursor.execute('SELECT * FROM info WHERE checked=?', (0,))
 
     @staticmethod
     def getDeletedFolders(cursor):
-        return cursor.execute('SELECT * FROM infoFolders WHERE checked=?',(0,))
+        return cursor.execute('SELECT * FROM infoFolders WHERE checked=?', (0,))
+
+    @staticmethod
+    def getFilePaths(cursor):
+        cursor = cursor.execute('SELECT fPath FROM info')
+        paths = []
+        for row in cursor:
+            paths.append(row[0])
+        return paths
+
+    @staticmethod
+    def getFolderPaths(cursor):
+        cursor = cursor.execute('SELECT fPath FROM infoFolders')
+        paths = []
+        for row in cursor:
+            paths.append(row[0])
+        return paths
 
     @staticmethod
     def updateInfoCleanup(cursor):
         # Unsure what this does. Keeping it
-        cursor.execute('UPDATE info SET checked=? WHERE checked =?',(0,1)) # Changed it back
+        cursor.execute('UPDATE info SET checked=? WHERE checked =?', (0, 1))
         cursor.commit()
 
 
@@ -328,31 +346,10 @@ class Verification:
     def generateReport(cursor, dir, verF):
         filesReport = Compare.files(cursor, dir)
         folderReport = Compare.folders(cursor, dir)
-        deletedFilesReport = Verification.deletedFiles(cursor)
-        deletedFolderReport = Verification.deletedFolders(cursor)
+        deletedReport = Compare.deletedPaths(cursor, dir)
 
-        report = filesReport + folderReport + deletedFilesReport + deletedFolderReport
+        report = filesReport + folderReport + deletedReport
         return f"Monitored directory : {dir}\nVerification file : {verF}\n{report.getSSReport()}"
-
-    @staticmethod
-    def deletedFiles(cursor):
-        cursor = DB.getDeletedFiles(cursor)
-        return Verification._deletedPaths('File', cursor)
-
-    @staticmethod
-    def deletedFolders(cursor):
-        cursor = DB.getDeletedFolders(cursor)
-        return Verification._deletedPaths('Folder', cursor)
-
-    @staticmethod
-    def _deletedPaths(mode, rows):
-        report = DiffReport()
-        for row in rows:
-            ss = f"{mode} deleted: {row[0]}"
-            print(ss)
-            report.incrementWarnings()
-            report.appendChangedFile(ss)
-        return report
 
 
 class Compare:
@@ -393,8 +390,10 @@ class Compare:
             if mode == 'FILE':
                 cHash = Utils.getFileHash(DB.getHashType(cursor), filepath)
                 errorMsg = Compare._fileProperties(fileObj.setChash(cHash), dbFileObj)
+                #DB.fileExists(cursor, filepath)
             elif mode == 'FOLDER':
                 errorMsg = Compare._fileProperties(fileObj, dbFileObj)
+                #DB.folderExists(cursor, filepath)
 
             if errorMsg:
                 errorMsg = f"CHANGED: {mode} {filepath} {errorMsg}\n"
@@ -402,7 +401,6 @@ class Compare:
                 report.incrementWarnings()
                 report.appendChangedFile(errorMsg)
 
-            DB.updateInfoFiles(cursor, filepath)
         return report
 
     @staticmethod
@@ -468,6 +466,29 @@ class Compare:
             eMsg += ", file content compromised, hash differ"
         return eMsg
 
+    @staticmethod
+    def deletedPaths(cursor, folder):
+        dbFolder = DB.getFolderPaths(cursor)
+        systemFolders = Utils.getFolderPaths(folder)
+        deletedFiles = [db for db in dbFolder if db not in systemFolders]
+
+        dbFiles = DB.getFilePaths(cursor)
+        systemFiles = Utils.getFilePaths(folder)
+        deletedFolders = [db for db in dbFiles if db not in systemFiles]
+
+        return Compare._deletedPathsReport(deletedFiles, deletedFolders)
+
+    @staticmethod
+    def _deletedPathsReport(files, folders):
+        report = DiffReport()
+        deleted = files + folders
+        for path in deleted:
+            mode = "FILE" if path in files else 'FOLDER'
+            ss = f"DELETED {mode}: {path}"
+            print(ss)
+            report.incrementWarnings()
+            report.appendChangedFile(ss)
+        return report
 
 class Utils:
 
@@ -494,7 +515,7 @@ class Utils:
     @staticmethod
     def writeReportFile(startTime, ss, fPath):
         with open(fPath, "w") as f:
-            f.write(ss + Utils.getElapsedTime(startTime))
+            f.write(ss + "\n" + Utils.getElapsedTime(startTime))
 
     @staticmethod
     def getElapsedTime(startTime):
