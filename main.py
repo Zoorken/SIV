@@ -252,14 +252,14 @@ class InitMode:
         DB.createTable(cursor)
         DB.writeHash(cursor, args.H)
 
-        report = InitMode.anlyseFilesToDb(args.D, cursor)
-        InitMode.anlyseFoldersToDb(args.D, cursor) # Get information about all the folders
-        cursor.close() # close db connection
+        files = InitMode.anlyseFilesToDb(args.D, cursor)
+        folders = InitMode.anlyseFoldersToDb(args.D, cursor)
+        cursor.close()
 
         ss = f"Monitored directory : {args.D}\n" \
              f"Verification file : {args.V}\n" \
-             f"Nr of directories : {report.dirs}\n" \
-             f"Nr of files : {report.files}\n"
+             f"Nr of directories : {folders}\n" \
+             f"Nr of files : {files}\n"
         print(ss)
         Utils.writeReportFile(startTime, ss, args.R)
 
@@ -285,25 +285,20 @@ class InitMode:
 
     @staticmethod
     def anlyseFilesToDb(folder, cursor):
-        report = DiffReport()
-        for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
-            report.incrementDirs()
-            for name in files:
-                report.incrementFiles()
-                filepath = os.path.join(root, name)
-                cHash = Utils.getFileHash(DB.getHashType(cursor), filepath)
-                DB.writeFileInfo(cursor, FileObj().initFromFilepath(filepath).setChash(cHash))
-
+        paths = Utils.getFilePaths(folder)
+        for path in paths:
+            cHash = Utils.getFileHash(DB.getHashType(cursor), path)
+            DB.writeFileInfo(cursor, FileObj().initFromFilepath(path).setChash(cHash))
         cursor.commit()
-        return report
+        return len(paths)
 
     @staticmethod
     def anlyseFoldersToDb(folder, cursor):
-        for root, dirs, files in os.walk(os.path.abspath(folder), topdown=True):
-            for folderName in dirs:
-                folderPath = os.path.join(root, folderName)
-                DB.writeFolderInfo(cursor, FileObj().initFromFilepath(folderPath))
+        paths = Utils.getFolderPaths(folder)
+        for path in paths:
+            DB.writeFolderInfo(cursor, FileObj().initFromFilepath(path))
         cursor.commit()
+        return len(paths)
 
 
 class Verification:
