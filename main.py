@@ -189,12 +189,6 @@ class DB:
             paths.append(row[0])
         return paths
 
-    @staticmethod
-    def updateInfoCleanup(cursor):
-        # Unsure what this does. Keeping it
-        cursor.execute('UPDATE info SET checked=? WHERE checked =?', (0, 1))
-        cursor.commit()
-
 
 class VerifyArgs:
 
@@ -330,11 +324,9 @@ class Verification:
         startTime = time.time()
         cursor = DB.connect(args.V)
 
-        report  = Verification.generateReport(cursor, args.D, args.V)
+        report = Verification.generateReport(cursor, args.D, args.V)
         Utils.writeReportFile(startTime, report, args.R)
 
-        # Cleanup
-        DB.updateInfoCleanup(cursor)
         print("Verification mode done")
 
     @staticmethod
