@@ -88,7 +88,10 @@ class DiffReport:
         self.warnings += 1
 
     def getSSReport(self):
-        return f"Nr of directories: {self.dirs}\nNr of files: {self.files}\nNr of warnings: {self.warnings}\n{self.ssChangedFiles}"
+        return f"Nr of directories: {self.dirs}\n" \
+               f"Nr of files: {self.files}\n" \
+               f"Nr of warnings: {self.warnings}\n" \
+               f"{self.ssChangedFiles}"
 
 
 class DB:
@@ -188,20 +191,22 @@ class VerifyArgs:
     @staticmethod
     def _monitoredDirectoryValid(args):
         if not os.path.isdir(args.D):
-            print("Directory {} is not existing".format(args.D))
+            print(f"Directory {args.D} is not existing")
             quit()
 
     @staticmethod
     def _inputDirNotInMetadataFiles(directory, verification, report):
         if directory in verification and directory in report:
-            print("Verification: {}\n Report: {} \n can't be inside: " +
-                "directory {}\n please specify outside {}".format(verification, report, directory, directory))
+            print(f"Verification: {verification}\n" +
+                  f"Report: {report} can't be inside: \n" +
+                  f"directory {directory}\n" +
+                  f"please specify outside {directory}")
             quit()
 
     @staticmethod
     def _isDir(inputArgument, f):
         if os.path.isdir(f):
-            print("Argument [{}] value is not a file [{}]".format(inputArgument, f))
+            print(f"Argument [{inputArgument}] value is not a file [{f}]")
             quit()
 
     @staticmethod
@@ -223,13 +228,13 @@ class VerifyArgs:
 
     def abortMissingFile(f):
         if not os.path.isfile(f):
-            print("ERROR: The file: {} is missing.".format(f))
+            print(f"ERROR: The file: {f} is missing.")
             quit()
 
     def removeFile(f):
         if os.path.isfile(f):
             os.remove(f)
-            print("Deleted {}".format(f))
+            print(f"Deleted {f}")
 
 
 class InitMode:
@@ -251,7 +256,10 @@ class InitMode:
         InitMode.anlyseFoldersToDb(args.D, cursor) # Get information about all the folders
         cursor.close() # close db connection
 
-        ss = f"Monitored directory : {args.D}\nVerification file : {args.V}\nNr of directories : {report.dirs}\nNr of files : {report.files}\n"
+        ss = f"Monitored directory : {args.D}\n" \
+             f"Verification file : {args.V}\n" \
+             f"Nr of directories : {report.dirs}\n" \
+             f"Nr of files : {report.files}\n"
         print(ss)
         Utils.writeReportFile(startTime, ss, args.R)
 
@@ -264,7 +272,7 @@ class InitMode:
             quit()
 
         if os.path.isfile(args.V) or os.path.isfile(args.R):
-            question = "Should we overwrite verification {} and report {} yes/no : ".format(args.V, args.R)
+            question = f"Should we overwrite verification {args.V} and report {args.R} yes/no : "
             if VerifyArgs.userChoiceYesOrNo(question) == "no":
                 print("The files will be preserved, goodbye")
                 quit()
